@@ -1,6 +1,6 @@
 
 # Library imports
-from typing import Callable, List
+from typing import Callable, List, Tuple
 
 
 class TestParameter:
@@ -12,20 +12,13 @@ class TestParameter:
         self.start_value = start_value
         self.stop_value = stop_value
         self.step_size = step_size
+        self.test_values = []
 
-    def next(self):
-        value = self.start_value + (self.step_size * self._idx)
-        if value > self.stop_value:
-            raise StopIteration
-        else:
-            self.setter(value)
-            self._idx += 1
-
-    def reset(self):
-        self._idx = 0
+        for x in range(int((self.stop_value - self.start_value) / self.step_size)):
+            self.test_values.append(self.start_value + (x * self.step_size))
 
     def values(self) -> List:
-        values = []
-        for x in range(int((self.stop_value - self.start_value) / self.step_size)):
-            values.append(self.next())
-        return values
+        return self.test_values
+
+    def values_tuple(self) -> List[Tuple]:
+        return [(v, self) for v in self.values()]
