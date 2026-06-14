@@ -97,3 +97,6 @@ test_key
 .idea/
 venv36/
 *.db
+
+# Logs folder
+logs/
