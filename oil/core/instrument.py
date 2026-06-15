@@ -1,7 +1,7 @@
 
 # Library imports
 import pyvisa
-
+import time
 
 class Instrument:
 
@@ -17,10 +17,13 @@ class Instrument:
 
     def _command(self, cmd_string: str) -> None:
         print(cmd_string)
+        self._instr.write(cmd_string)
 
-    def _query(self, qry_string: str) -> str:
-        print(f"{qry_string}?")
-        return ""
+    def _query(self, qry_string: str, qm: bool = True) -> str:
+        qm = "?" if qm else ""
+        msg = f"{qry_string}{qm}"
+        print(msg)
+        return self._instr.query(msg)
 
     def reset(self) -> None:
         self._command(self._RESET)

@@ -1,28 +1,37 @@
-from oil.test_manager.test_manager import TestManager
-from oil.test_manager.test_parameter import TestParameter#
-from oil.test_manager.test_action import TestAction
-from oil.test_manager.sweep import ParameterSweep
+from oil.analyzers.n9030 import N9030
 
 
 from time import sleep
 from random import random
 
+import matplotlib.pyplot as plt
 
-def specan_measure(context, value):
-    sleep(random()* 3)
+sa_conn_string = "TCPIP::169.254.156.140::INSTR"
 
 
 if __name__ == "__main__":
 
-    sweepF = ParameterSweep("Freq", lambda x,y: x, 100, 200, 10)
-    sweepP = ParameterSweep("Power", lambda x,y: x, 0, 14, 0.2)
-    sweepA = ParameterSweep("Atten", lambda x,y: x, 0, 20, 10)
+    sa = N9030(sa_conn_string)
+    print(sa.identify())
 
-    measure = TestAction(name="SpecAn Measure", value=0, execute=specan_measure)
+    sa.frequency_span = 200E6
+    sa.frequency_center = 10E9
 
-    tm = TestManager([sweepF, sweepP, sweepA, measure])
+    sa.marker[1].enabled = True
+    sa.marker[1].peak_search()
+    peak_f = sa.marker[1].frequency/1E9
+    peak_p = sa.marker[1].power
+    print(f"Marker: {peak_f}GHz, {peak_p}dBm")
+    sa.marker[1].frequency = 10E9 + 20E6
 
+    peak_f = sa.marker[1].frequency/1E9
+    peak_p = sa.marker[1].power
 
-    tm.run()
+    print(f"Marker: {peak_f}GHz, {peak_p}dBm")
 
+    data = sa.download_trace(1)
+
+    plt.plot(data["frequency"], data["power"])
+
+    plt.show()
     pass
