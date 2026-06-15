@@ -5,8 +5,19 @@ from typing import Callable, List, Tuple
 
 
 class TestParameter:
-
+    """
+    The class
+    """
     def __init__(self, name: str, setter: Callable[[float], None], start_value: float, stop_value: float, step_size: float):
+        """
+        Class of init
+        :param name:
+        :param setter:
+        :param start_value:
+        :param stop_value:
+        :param step_size:
+        """
+
         self._idx = 0
         self.name = name
         self.setter = setter
@@ -21,3 +32,7 @@ class TestParameter:
 
     def values_tuple(self) -> List[Tuple]:
         return [(v, self) for v in self.values()]
+
+
+
+tp = TestParameter()
