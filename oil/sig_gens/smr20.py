@@ -10,11 +10,11 @@ class SMR20(Instrument):
     # SCIPI strings
     _FREQ = "FREQ"
     _POWER = "POW"
-    _RFON = "OUTP1:PON"
+    _RFON = "OUTP1:STAT"
     _EXTREF = "ROSC:SOUR"
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, visa_string: str):
+        super().__init__(visa_string)
 
     @property
     def frequency(self) -> float:
