@@ -7,21 +7,20 @@ from random import random
 import matplotlib.pyplot as plt
 
 sa_conn_string = "TCPIP::169.254.156.140::INSTR"
-sg_conn_string = "ASRL7::INSTR"
+sg_conn_string = "ASRL8::INSTR"
 
 if __name__ == "__main__":
 
     f = 13.345E9
 
-    sa = N9030(sa_conn_string)
+    #sa = N9030(sa_conn_string)
     sg = SMR20(sg_conn_string)
 
-
-    print(sa.identify())
+    #print(sa.identify())
     print(sg.identify())
 
-    sa.frequency_span = 20E6
-    sa.frequency_center = f
+    #sa.frequency_span = 20E6
+    #sa.frequency_center = f
 
     sg.frequency = f
     sg.power = -4.5
@@ -29,7 +28,7 @@ if __name__ == "__main__":
 
     sleep(1)
 
-    sa.marker[1].enabled = True
+    """sa.marker[1].enabled = True
     sa.marker[1].peak_search()
     peak_f = sa.marker[1].frequency/1E9
     peak_p = sa.marker[1].power
@@ -45,5 +44,5 @@ if __name__ == "__main__":
 
     plt.plot(data["frequency"], data["power"])
 
-    plt.show()
+    plt.show()"""
     pass
