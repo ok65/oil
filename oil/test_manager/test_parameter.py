@@ -3,7 +3,6 @@
 from typing import Callable, List, Tuple
 
 
-
 class TestParameter:
     """
     The class
@@ -29,10 +28,7 @@ class TestParameter:
         for x in range(int((self.stop_value - self.start_value) / self.step_size)):
             self.test_values.append(self.start_value + (x * self.step_size))
 
-
     def values_tuple(self) -> List[Tuple]:
         return [(v, self) for v in self.values()]
 
 
-
-tp = TestParameter()

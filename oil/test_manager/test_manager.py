@@ -23,7 +23,7 @@ class TestManager:
     """
     def __init__(self, actions: List[Union['TestAction', 'Sweep']]):
         """
-        TestManager intialiser. Takes a list of TestAction and Sweeps, and creates a combination list (using the
+        TestManager initialiser. Takes a list of TestAction and Sweeps, and creates a combination list (using the
         product function) and so preserves the order they are provided. This means you can set parameters first, then
         perform your measurement action last.
         :param actions: List of TestActions and Sweeps
