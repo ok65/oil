@@ -2,6 +2,7 @@
 # Library imports
 import pyvisa
 import serial
+import time
 from typing import Callable, Optional
 
 # Project imports
@@ -19,16 +20,31 @@ class Instrument:
     def __init__(self, visa_string: str, log_func: Optional[Callable[[str], None]] = None):
         self.log_func = log_func if log_func else lambda x: None
         rm = pyvisa.ResourceManager()
-        try:
-            self._instr = rm.open_resource(visa_string)
+        retry = True
+        while True:
+            try:
+                self._instr = rm.open_resource(visa_string)
 
-        # Reraise IP Visa error as oil error
-        except pyvisa.errors.VisaIOError as e:
-            raise PyVisaConfigError(e.description)
+            # Reraise IP Visa error as oil error (after a retry)
+            except pyvisa.errors.VisaIOError as e:
+                if retry:
+                    retry = False
+                    time.sleep(1)
+                    continue
+                else:
+                    raise PyVisaConfigError(e.description)
 
-        # Reraise serial port error as oil error
-        except serial.serialutil.SerialException as e:
-            raise PyVisaConfigError(str(e))
+            # Reraise serial port error as oil error (after a retry)
+            except serial.serialutil.SerialException as e:
+                if retry:
+                    retry = False
+                    time.sleep(1)
+                    continue
+                else:
+                    raise PyVisaConfigError(str(e))
+
+            # If we get here, we succeeded, break from the loop.
+            break
 
     def _command(self, cmd_string: str, auto_retry: bool = True) -> None:
 

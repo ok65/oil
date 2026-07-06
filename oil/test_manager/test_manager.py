@@ -46,7 +46,7 @@ class TestManager:
 
         # Create the combination list of test actions
         test_actions = list(product(*action_list))
-        self.sequence = [TestIteration(ta) for ta in test_actions]
+        self.sequence = [TestIteration(ta, self) for ta in test_actions]
 
     def info(self, msg):
         """ Alias for logger.info() """
