@@ -28,6 +28,7 @@ class TestManager:
         perform your measurement action last.
         :param actions: List of TestActions and Sweeps
         """
+        self.data = {}
         # Setup the logger
         self.logger = setup_logging()
 
