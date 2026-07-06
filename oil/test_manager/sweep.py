@@ -47,6 +47,6 @@ class ParameterSweep(Sweep):
         self.stop_value = stop_value
         self.step_size = step_size
 
-        for x in range(int((self.stop_value - self.start_value) / self.step_size)):
+        for x in range(int((self.stop_value - self.start_value) / self.step_size) + 1):
             value = round(self.start_value + (x * self.step_size), 5)
             self.test_actions.append(TestAction(name=f"{name}-{value}", value=value, execute=execute))
