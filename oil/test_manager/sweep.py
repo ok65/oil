@@ -50,3 +50,21 @@ class ParameterSweep(Sweep):
         for x in range(int((self.stop_value - self.start_value) / self.step_size) + 1):
             value = round(self.start_value + (x * self.step_size), 5)
             self.test_actions.append(TestAction(name=f"{name}-{value}", value=value, execute=execute))
+
+
+class ListSweep(Sweep):
+    """
+    List sweep class, takes a list of values and produces a list of TestAction instances.
+    """
+
+    def __init__(self, name: str, execute: Callable[['TestIteration', float], None], value_list: List):
+        """
+        List sweep initialiser takes a list of values and creates an internal list of TestAction instances.
+        :param name: String name to represent this sweep
+        :param execute: Callable function to perform the test action. Should take a TestIteration instance (the context)
+        :param value_list: List of values to use (order will be preserved)
+        """
+        super().__init__()
+
+        for value in value_list:
+            self.test_actions.append(TestAction(name=f"{name}-{value}", value=value, execute=execute))
