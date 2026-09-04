@@ -46,6 +46,11 @@ class Instrument:
             # If we get here, we succeeded, break from the loop.
             break
 
+        # Because its raw socket, make sure terminations are good
+        if visa_string.endswith("SOCKET"):
+            self._instr.read_termination = "\n"
+            self._instr.write_termination = "\n"
+
     def _command(self, cmd_string: str, auto_retry: bool = True) -> None:
 
         # Initialise failed flag, and attempt first command write (suppressing VisaIOError)
