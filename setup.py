@@ -1,6 +1,6 @@
 
 # Library imports
-from setuptools import setup
+from setuptools import setup, find_packages
 
 # Grab version number from file
 with open("VERSION", "r") as fp:
@@ -11,7 +11,7 @@ setup(
     name='oil',
     version=VERSION,
     description="Oliver's Instrument Library",
-    pacakges=['oil'],
+    packages=find_packages(),
     install_requires=[
         'pyvisa',
         'pyvisa-py',
