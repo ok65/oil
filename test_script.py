@@ -8,4 +8,6 @@ if __name__ == "__main__":
 
     vna = E5071C(ip_address_string(VNA_IP))
 
+    print(vna.identify())
+
     pass

@@ -19,7 +19,7 @@ class Instrument:
 
     def __init__(self, visa_string: str, log_func: Optional[Callable[[str], None]] = None):
         self.log_func = log_func if log_func else lambda x: None
-        rm = pyvisa.ResourceManager()
+        rm = pyvisa.ResourceManager("@py")
         retry = True
         while True:
             try:
