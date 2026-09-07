@@ -17,6 +17,12 @@ setup(
     description="Python drivers and test tooling for RF instruments",
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
+    url="https://github.com/ok65/oil",
+    project_urls={
+        "Homepage": "https://github.com/ok65/oil",
+        "Source": "https://github.com/ok65/oil",
+        "Issue tracker": "https://github.com/ok65/oil/issues",
+    },
     packages=find_packages(),
     install_requires=[
         'pyvisa',
