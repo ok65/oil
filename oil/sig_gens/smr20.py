@@ -3,6 +3,7 @@
 
 # Project imports
 from oil.core.instrument import Instrument
+from oil.core.virtual_instrument import VirtualInstrument
 
 
 class SMR20(Instrument):
@@ -61,4 +62,69 @@ class SMR20(Instrument):
     def external_reference(self, value: bool) -> None:
         """ :param value: Set the external reference enabled state """
         ext_in = "EXT" if value else "INT"
-        self._command(f"{self._RFON} {ext_in}")
+        self._command(f"{self._EXTREF} {ext_in}")
+
+
+class VirtualSMR20(VirtualInstrument):
+    """Stateful simulator for the implemented SMR20 command surface."""
+
+    IDENTIFICATION = "Rohde&Schwarz,VirtualSMR20,0,0"
+
+    _FREQ = "FREQ"
+    _POWER = "POW"
+    _RFON = "OUTP1:STAT"
+    _EXTREF = "ROSC:SOUR"
+
+    _FREQUENCY_KEY = "frequency.hz"
+    _POWER_KEY = "power.dbm"
+    _RF_ENABLE_KEY = "rf.enabled"
+    _EXTERNAL_REFERENCE_KEY = "reference.external"
+
+    def __init__(self, frequency: float = 1_000_000.0, power: float = -10.0,
+                 rf_enabled: bool = False, external_reference: bool = False):
+        super().__init__()
+        self._set_defaults(frequency, power, rf_enabled, external_reference)
+
+    def reset(self) -> None:
+        super().reset()
+        self._set_defaults(1_000_000.0, -10.0, False, False)
+
+    def handle_command(self, command: str) -> None:
+        prefix, separator, value = command.partition(" ")
+        if not separator:
+            raise NotImplementedError(f"Unsupported SMR20 command: {command}")
+
+        if prefix == self._FREQ:
+            self.write_memory(self._FREQUENCY_KEY, float(value))
+            return
+        if prefix == self._POWER:
+            power = value[:-4] if value.endswith(" dBM") else value
+            self.write_memory(self._POWER_KEY, float(power))
+            return
+        if prefix == self._RFON and value in ("ON", "OFF"):
+            self.write_memory(self._RF_ENABLE_KEY, value == "ON")
+            return
+        if prefix == self._EXTREF and value in ("EXT", "INT"):
+            self.write_memory(self._EXTERNAL_REFERENCE_KEY, value == "EXT")
+            return
+        raise NotImplementedError(f"Unsupported SMR20 command: {command}")
+
+    def handle_query(self, command: str) -> str:
+        if command == f"{self._FREQ}?":
+            return str(self.read_memory(self._FREQUENCY_KEY))
+        if command == f"{self._POWER}?":
+            return str(self.read_memory(self._POWER_KEY))
+        if command == f"{self._RFON}?":
+            return "ON" if self.read_memory(self._RF_ENABLE_KEY) else "OFF"
+        if command == f"{self._EXTREF}?":
+            return "EXT" if self.read_memory(self._EXTERNAL_REFERENCE_KEY) else "INT"
+        raise NotImplementedError(f"Unsupported SMR20 query: {command}")
+
+    def _set_defaults(self, frequency: float, power: float, rf_enabled: bool,
+                      external_reference: bool) -> None:
+        self.update_memory({
+            self._FREQUENCY_KEY: frequency,
+            self._POWER_KEY: power,
+            self._RF_ENABLE_KEY: rf_enabled,
+            self._EXTERNAL_REFERENCE_KEY: external_reference,
+        })

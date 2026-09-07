@@ -1,1 +1,1 @@
-from oil.switches.rf_switch_matrix import RFSwitchMatrix
+from oil.switches.rf_switch_matrix import RFSwitchMatrix, VirtualRFSwitchMatrix

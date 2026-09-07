@@ -1,9 +1,10 @@
 
 # Library imports
-from typing import Dict
+from typing import Dict, List
 
 # Project imports
 from oil.core.instrument import Instrument
+from oil.core.virtual_instrument import VirtualInstrument
 from oil.analyzers.markers import Marker
 
 
@@ -27,7 +28,7 @@ class N9030(Instrument):
         super().__init__(visa_string)
         
         # Initialise list of markers (markers are 1-indexed)
-        self._marker = []
+        self._marker = {}
         for x in range(1, self._NUM_MARKERS+1):
             self._marker[x] = (N9030_Marker(parent=self, index=x))
 
@@ -95,7 +96,7 @@ class N9030(Instrument):
     def input_attenuation(self) -> float:
         """ :return: Returns the current input power attenuation in dBm """
         atten = self._query(f"{self._ATTEN}")
-        return 0 if atten == "AUTO" else atten
+        return 0 if atten == "AUTO" else float(atten)
 
     @input_attenuation.setter
     def input_attenuation(self, value: float):
@@ -148,7 +149,7 @@ class N9030(Instrument):
         start = self.frequency_start
         stop = self.frequency_stop
         points = self.frequency_points
-        step = (stop - start)/points
+        step = (stop - start) / (points - 1) if points > 1 else 0
 
         data["frequency"] = [round((x*step)+start, 1) for x in range(points)]
 
@@ -209,3 +210,161 @@ class N9030_Marker(Marker):
         stat = "ON" if value else "OFF"
         self.parent._command(f"CALC:MARK{self.index}:STAT {stat}")
         self.parent._command(f"CALC:MARK{self.index}:MODE {mode}")
+
+
+class VirtualN9030(VirtualInstrument):
+    """Stateful simulator for the N9030 commands implemented by ``N9030``."""
+
+    IDENTIFICATION = "Keysight,VirtualN9030,0,0"
+
+    _FREQ_CENT = "FREQ:CENT"
+    _FREQ_START = "FREQ:STAR"
+    _FREQ_STOP = "FREQ:STOP"
+    _FREQ_SPAN = "FREQ:SPAN"
+    _REF_LEVEL = "DISP:WIND1:TRAC:Y:RLEV"
+    _ATTEN = "POW:RF:ATT"
+    _BW = "BAND:SEL"
+    _FREQ_POINTS = "SENS:SWE:POIN"
+
+    _FREQUENCY_CENTER_KEY = "frequency.center.hz"
+    _FREQUENCY_START_KEY = "frequency.start.hz"
+    _FREQUENCY_STOP_KEY = "frequency.stop.hz"
+    _FREQUENCY_SPAN_KEY = "frequency.span.hz"
+    _FREQUENCY_POINTS_KEY = "frequency.points"
+    _REFERENCE_LEVEL_KEY = "display.reference_level.dbm"
+    _INPUT_ATTENUATION_KEY = "input.attenuation.db"
+    _BANDWIDTH_KEY = "bandwidth.selection"
+
+    def __init__(self):
+        super().__init__()
+        self._set_defaults()
+
+    def reset(self) -> None:
+        super().reset()
+        self._set_defaults()
+
+    def handle_command(self, command: str) -> None:
+        prefix, separator, value = command.partition(" ")
+        if not separator:
+            normalized = command.lstrip(":")
+            if normalized.startswith("CALC:MARK") and normalized.endswith((":MAX", ":MAX:RIGH", ":MAX:LEFT")):
+                marker_index = self._marker_index(normalized)
+                self.write_memory(self._marker_key(marker_index, "last_search"), normalized.rsplit(":", 1)[1])
+                return
+            raise NotImplementedError(f"Unsupported N9030 command: {command}")
+
+        numeric_keys = {
+            self._FREQ_CENT: self._FREQUENCY_CENTER_KEY,
+            self._FREQ_START: self._FREQUENCY_START_KEY,
+            self._FREQ_STOP: self._FREQUENCY_STOP_KEY,
+            self._FREQ_SPAN: self._FREQUENCY_SPAN_KEY,
+            self._REF_LEVEL: self._REFERENCE_LEVEL_KEY,
+        }
+        if prefix in numeric_keys:
+            self.write_memory(numeric_keys[prefix], float(value.split()[0]))
+            return
+        if prefix == self._ATTEN:
+            attenuation = "AUTO" if value == "AUTO" else float(value)
+            self.write_memory(self._INPUT_ATTENUATION_KEY, attenuation)
+            return
+        if prefix == self._BW and (value == "AUTO" or value.startswith("RBW")):
+            self.write_memory(self._BANDWIDTH_KEY, value)
+            return
+
+        normalized = prefix.lstrip(":")
+        if normalized.startswith("CALC:MARK"):
+            self._handle_marker_command(normalized, value)
+            return
+        raise NotImplementedError(f"Unsupported N9030 command: {command}")
+
+    def handle_query(self, command: str) -> str:
+        query_keys = {
+            f"{self._FREQ_CENT}?": self._FREQUENCY_CENTER_KEY,
+            f"{self._FREQ_START}?": self._FREQUENCY_START_KEY,
+            f"{self._FREQ_STOP}?": self._FREQUENCY_STOP_KEY,
+            f"{self._FREQ_SPAN}?": self._FREQUENCY_SPAN_KEY,
+            f"{self._REF_LEVEL}?": self._REFERENCE_LEVEL_KEY,
+            f"{self._FREQ_POINTS}?": self._FREQUENCY_POINTS_KEY,
+            f"{self._BW}?": self._BANDWIDTH_KEY,
+        }
+        if command in query_keys:
+            return str(self.read_memory(query_keys[command]))
+        if command == f"{self._ATTEN}?":
+            return str(self.read_memory(self._INPUT_ATTENUATION_KEY))
+        if command.startswith(":TRAC:DATA? TRACE"):
+            trace_id = self._parse_trace_id(command)
+            self._ensure_trace(trace_id)
+            return self._csv(self.read_memory(self._trace_key(trace_id)))
+
+        normalized = command.lstrip(":")
+        if normalized.startswith("CALC:MARK"):
+            return self._handle_marker_query(normalized)
+        raise NotImplementedError(f"Unsupported N9030 query: {command}")
+
+    def _set_defaults(self) -> None:
+        self.update_memory({
+            self._FREQUENCY_CENTER_KEY: 1_500_000.0,
+            self._FREQUENCY_START_KEY: 1_000_000.0,
+            self._FREQUENCY_STOP_KEY: 2_000_000.0,
+            self._FREQUENCY_SPAN_KEY: 1_000_000.0,
+            self._FREQUENCY_POINTS_KEY: 3,
+            self._REFERENCE_LEVEL_KEY: 0.0,
+            self._INPUT_ATTENUATION_KEY: "AUTO",
+            self._BANDWIDTH_KEY: "AUTO",
+        })
+        self._ensure_trace(1)
+
+    def _ensure_trace(self, trace_id: int) -> None:
+        key = self._trace_key(trace_id)
+        if key not in self.memory:
+            self.write_memory(key, [-50.0, -40.0, -45.0])
+
+    @staticmethod
+    def _trace_key(trace_id: int) -> str:
+        return f"trace.{trace_id}.power_data"
+
+    @staticmethod
+    def _marker_key(marker_index: int, value_name: str) -> str:
+        return f"marker.{marker_index}.{value_name}"
+
+    @staticmethod
+    def _parse_trace_id(command: str) -> int:
+        try:
+            return int(command.removeprefix(":TRAC:DATA? TRACE"))
+        except ValueError as error:
+            raise NotImplementedError(f"Unsupported N9030 trace query: {command}") from error
+
+    @staticmethod
+    def _marker_index(command: str) -> int:
+        marker = command.removeprefix("CALC:MARK").split(":", 1)[0]
+        try:
+            return int(marker)
+        except ValueError as error:
+            raise NotImplementedError(f"Unsupported N9030 marker command: {command}") from error
+
+    def _handle_marker_command(self, command: str, value: str) -> None:
+        marker_index = self._marker_index(command)
+        if command.endswith(":X"):
+            self.write_memory(self._marker_key(marker_index, "frequency"), float(value))
+            return
+        if command.endswith(":STAT") and value in ("ON", "OFF"):
+            self.write_memory(self._marker_key(marker_index, "enabled"), value == "ON")
+            return
+        if command.endswith(":MODE") and value in ("POS", "OFF"):
+            self.write_memory(self._marker_key(marker_index, "enabled"), value == "POS")
+            return
+        raise NotImplementedError(f"Unsupported N9030 marker command: {command} {value}")
+
+    def _handle_marker_query(self, command: str) -> str:
+        marker_index = self._marker_index(command)
+        if command.endswith(":X?"):
+            return str(self.read_memory(self._marker_key(marker_index, "frequency"), 0.0))
+        if command.endswith(":Y?"):
+            return str(self.read_memory(self._marker_key(marker_index, "power"), -50.0))
+        if command.endswith(":MODE?"):
+            return "POS" if self.read_memory(self._marker_key(marker_index, "enabled"), False) else "OFF"
+        raise NotImplementedError(f"Unsupported N9030 marker query: {command}")
+
+    @staticmethod
+    def _csv(values: List[float]) -> str:
+        return ",".join(str(value) for value in values)

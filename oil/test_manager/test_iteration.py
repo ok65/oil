@@ -20,7 +20,7 @@ class TestIteration:
         """
         self.actions = actions
         self.data = {}
-        self.test_maanger = test_manager
+        self.test_manager = test_manager
 
     def execute(self) -> None:
         """

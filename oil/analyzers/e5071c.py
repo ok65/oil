@@ -1,8 +1,9 @@
 # Library imports
-from typing import Dict
+from typing import Dict, List
 
 # Project imports
 from oil.core.instrument import Instrument
+from oil.core.virtual_instrument import VirtualInstrument
 from oil.analyzers.markers import Marker
 
 
@@ -241,6 +242,210 @@ class E5071C(Instrument):
         data["level"] = y_values[::2]
 
         return data
+
+
+class VirtualE5071C(VirtualInstrument):
+    """Stateful simulator for the E5071C commands implemented by ``E5071C``."""
+
+    IDENTIFICATION = "Keysight,VirtualE5071C,0,0"
+
+    _FREQ_CENT = "SENS1:FREQ:CENT"
+    _FREQ_START = "SENS1:FREQ:STAR"
+    _FREQ_STOP = "SENS1:FREQ:STOP"
+    _FREQ_SPAN = "SENS1:FREQ:SPAN"
+    _FREQ_POINTS = "SENS1:SWE:POIN"
+    _SOURCE_POWER = "SOUR1:POW"
+    _PULL_X_DATA = "CALC1:DATA:XAX"
+    _PULL_Y_DATA = "CALC1:DATA:FDAT"
+    _SCALE_PER_DIV = "DISP:WIND1:TRAC1:Y:SCAL:PDIV"
+    _REF_LEVEL = "DISP:WIND1:TRAC1:Y:SCAL:RLEV"
+    _REF_POSITION = "DISP:WIND1:TRAC1:Y:SCAL:RPOS"
+    _SOURCE_ATTENUATION = "SOUR1:POW:ATT"
+    _SOURCE_ATTENUATION_AUTO = "SOUR1:POW:ATT:AUTO"
+    _MEASUREMENT = "CALC1:PAR1:DEF"
+
+    _FREQUENCY_CENTER_KEY = "frequency.center.hz"
+    _FREQUENCY_START_KEY = "frequency.start.hz"
+    _FREQUENCY_STOP_KEY = "frequency.stop.hz"
+    _FREQUENCY_SPAN_KEY = "frequency.span.hz"
+    _FREQUENCY_POINTS_KEY = "frequency.points"
+    _SOURCE_POWER_KEY = "source.power.dbm"
+    _REFERENCE_LEVEL_KEY = "display.trace.1.reference_level"
+    _SCALE_PER_DIVISION_KEY = "display.trace.1.scale_per_division"
+    _REFERENCE_POSITION_KEY = "display.trace.1.reference_position"
+    _SOURCE_ATTENUATION_KEY = "source.attenuation.db"
+    _SOURCE_ATTENUATION_AUTO_KEY = "source.attenuation.auto"
+    _MEASUREMENT_KEY = "measurement.parameter"
+    _SELECTED_TRACE_KEY = "selected_trace"
+
+    def __init__(self):
+        super().__init__()
+        self._set_defaults()
+
+    def reset(self) -> None:
+        super().reset()
+        self._set_defaults()
+
+    def handle_command(self, command: str) -> None:
+        if command.startswith("CALC1:PAR") and command.endswith(":SEL"):
+            trace_id = self._parse_trace_selection(command)
+            self.write_memory(self._SELECTED_TRACE_KEY, trace_id)
+            self._ensure_trace(trace_id)
+            return
+        if command.startswith("CALC1:MARK") and " " not in command:
+            self._handle_marker_command(command, "")
+            return
+
+        prefix, separator, value = command.partition(" ")
+        if not separator:
+            raise NotImplementedError(f"Unsupported E5071C command: {command}")
+
+        numeric_keys = {
+            self._FREQ_CENT: self._FREQUENCY_CENTER_KEY,
+            self._FREQ_START: self._FREQUENCY_START_KEY,
+            self._FREQ_STOP: self._FREQUENCY_STOP_KEY,
+            self._FREQ_SPAN: self._FREQUENCY_SPAN_KEY,
+            self._FREQ_POINTS: self._FREQUENCY_POINTS_KEY,
+            self._SOURCE_POWER: self._SOURCE_POWER_KEY,
+            self._REF_LEVEL: self._REFERENCE_LEVEL_KEY,
+            self._SCALE_PER_DIV: self._SCALE_PER_DIVISION_KEY,
+            self._REF_POSITION: self._REFERENCE_POSITION_KEY,
+            self._SOURCE_ATTENUATION: self._SOURCE_ATTENUATION_KEY,
+        }
+        if prefix in numeric_keys:
+            number = float(value)
+            self.write_memory(
+                numeric_keys[prefix],
+                int(number) if prefix == self._FREQ_POINTS else number,
+            )
+            return
+        if prefix == self._SOURCE_ATTENUATION_AUTO and value in ("ON", "OFF"):
+            self.write_memory(self._SOURCE_ATTENUATION_AUTO_KEY, value == "ON")
+            return
+        if prefix == self._MEASUREMENT:
+            self.write_memory(self._MEASUREMENT_KEY, value)
+            return
+        if prefix.startswith("CALC1:MARK"):
+            self._handle_marker_command(prefix, value)
+            return
+        raise NotImplementedError(f"Unsupported E5071C command: {command}")
+
+    def handle_query(self, command: str) -> str:
+        query_keys = {
+            f"{self._FREQ_CENT}?": self._FREQUENCY_CENTER_KEY,
+            f"{self._FREQ_START}?": self._FREQUENCY_START_KEY,
+            f"{self._FREQ_STOP}?": self._FREQUENCY_STOP_KEY,
+            f"{self._FREQ_SPAN}?": self._FREQUENCY_SPAN_KEY,
+            f"{self._FREQ_POINTS}?": self._FREQUENCY_POINTS_KEY,
+            f"{self._SOURCE_POWER}?": self._SOURCE_POWER_KEY,
+            f"{self._REF_LEVEL}?": self._REFERENCE_LEVEL_KEY,
+            f"{self._SCALE_PER_DIV}?": self._SCALE_PER_DIVISION_KEY,
+            f"{self._REF_POSITION}?": self._REFERENCE_POSITION_KEY,
+            f"{self._SOURCE_ATTENUATION}?": self._SOURCE_ATTENUATION_KEY,
+            f"{self._MEASUREMENT}?": self._MEASUREMENT_KEY,
+        }
+        if command in query_keys:
+            return str(self.read_memory(query_keys[command]))
+        if command == f"{self._SOURCE_ATTENUATION_AUTO}?":
+            return "1" if self.read_memory(self._SOURCE_ATTENUATION_AUTO_KEY) else "0"
+        if command == f"{self._PULL_X_DATA}?":
+            return self._csv(self.read_memory(self._trace_key(self._selected_trace(), "frequency_data")))
+        if command == f"{self._PULL_Y_DATA}?":
+            return self._csv(self.read_memory(self._trace_key(self._selected_trace(), "formatted_data")))
+        if command.startswith("CALC1:MARK"):
+            return self._handle_marker_query(command)
+        raise NotImplementedError(f"Unsupported E5071C query: {command}")
+
+    def _set_defaults(self) -> None:
+        self.update_memory({
+            self._FREQUENCY_CENTER_KEY: 1_500_000.0,
+            self._FREQUENCY_START_KEY: 1_000_000.0,
+            self._FREQUENCY_STOP_KEY: 2_000_000.0,
+            self._FREQUENCY_SPAN_KEY: 1_000_000.0,
+            self._FREQUENCY_POINTS_KEY: 3,
+            self._SOURCE_POWER_KEY: -10.0,
+            self._REFERENCE_LEVEL_KEY: 0.0,
+            self._SCALE_PER_DIVISION_KEY: 10.0,
+            self._REFERENCE_POSITION_KEY: 5.0,
+            self._SOURCE_ATTENUATION_KEY: 0.0,
+            self._SOURCE_ATTENUATION_AUTO_KEY: True,
+            self._MEASUREMENT_KEY: "S21",
+            self._SELECTED_TRACE_KEY: 1,
+        })
+        self._ensure_trace(1)
+
+    def _ensure_trace(self, trace_id: int) -> None:
+        frequency_key = self._trace_key(trace_id, "frequency_data")
+        if frequency_key not in self.memory:
+            self.update_memory({
+                frequency_key: [1_000_000.0, 1_500_000.0, 2_000_000.0],
+                self._trace_key(trace_id, "formatted_data"): [-20.0, 0.0, -10.0, 0.0, -15.0, 0.0],
+            })
+
+    def _selected_trace(self) -> int:
+        return self.read_memory(self._SELECTED_TRACE_KEY)
+
+    @staticmethod
+    def _trace_key(trace_id: int, value_name: str) -> str:
+        return f"trace.{trace_id}.{value_name}"
+
+    def _marker_key(self, marker_index: int, value_name: str) -> str:
+        return f"trace.{self._selected_trace()}.marker.{marker_index}.{value_name}"
+
+    def _parse_trace_selection(self, command: str) -> int:
+        trace = command.removeprefix("CALC1:PAR").removesuffix(":SEL")
+        try:
+            return int(trace)
+        except ValueError as error:
+            raise NotImplementedError(f"Unsupported E5071C command: {command}") from error
+
+    def _marker_index(self, command: str) -> int:
+        marker = command.removeprefix("CALC1:MARK").split(":", 1)[0]
+        try:
+            return int(marker)
+        except ValueError as error:
+            raise NotImplementedError(f"Unsupported E5071C marker command: {command}") from error
+
+    def _handle_marker_command(self, prefix: str, value: str) -> None:
+        marker_index = self._marker_index(prefix)
+        if prefix.endswith(":X"):
+            self.write_memory(self._marker_key(marker_index, "frequency"), float(value))
+            return
+        if prefix.endswith(":STAT") and value in ("ON", "OFF"):
+            self.write_memory(self._marker_key(marker_index, "enabled"), value == "ON")
+            return
+        if prefix.endswith(":FUNC:TYPE") and value == "MAX":
+            return
+        if prefix.endswith(":FUNC:EXEC"):
+            self._move_marker_to_peak(marker_index)
+            return
+        raise NotImplementedError(f"Unsupported E5071C marker command: {prefix} {value}")
+
+    def _handle_marker_query(self, command: str) -> str:
+        marker_index = self._marker_index(command)
+        if command.endswith(":X?"):
+            return str(self.read_memory(self._marker_key(marker_index, "frequency"), 0.0))
+        if command.endswith(":Y?"):
+            return str(self.read_memory(self._marker_key(marker_index, "power"), 0.0))
+        if command.endswith(":STAT?"):
+            return "1" if self.read_memory(self._marker_key(marker_index, "enabled"), False) else "0"
+        raise NotImplementedError(f"Unsupported E5071C marker query: {command}")
+
+    def _move_marker_to_peak(self, marker_index: int) -> None:
+        frequencies: List[float] = self.read_memory(self._trace_key(self._selected_trace(), "frequency_data"))
+        formatted_data: List[float] = self.read_memory(self._trace_key(self._selected_trace(), "formatted_data"))
+        levels = formatted_data[::2]
+        if not frequencies or len(frequencies) != len(levels):
+            raise ValueError("Virtual E5071C trace data has incompatible frequency and level lengths.")
+        peak_index = max(range(len(levels)), key=levels.__getitem__)
+        self.update_memory({
+            self._marker_key(marker_index, "frequency"): frequencies[peak_index],
+            self._marker_key(marker_index, "power"): levels[peak_index],
+        })
+
+    @staticmethod
+    def _csv(values: List[float]) -> str:
+        return ",".join(str(value) for value in values)
 
 
 class E5071C_Marker(Marker):
