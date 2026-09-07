@@ -1,9 +1,11 @@
 
 # Library imports
+from pathlib import Path
 from setuptools import setup, find_packages
 
 # Grab version number from file
-with open("VERSION", "r") as fp:
+project_root = Path(__file__).resolve().parent
+with (project_root / "VERSION").open(encoding="utf-8") as fp:
     VERSION = fp.read().strip()
 
 # Run setup tools

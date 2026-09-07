@@ -238,7 +238,7 @@ class E5071C(Instrument):
         y_data = self._query(self._PULL_Y_DATA, qm=True)
         y_values = [float(d) for d in y_data.split(",")]
 
-        data["power"] = y_values[::2]
+        data["level"] = y_values[::2]
 
         return data
 
