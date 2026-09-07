@@ -14,6 +14,8 @@ class RFSwitchMatrix(Instrument):
     _RFB = "RFB:SWITCH"
 
     def __init__(self, visa_string: str):
+        if visa_string.endswith("INSTR"):
+            visa_string = visa_string[:-5]+"5025::SOCKET"
         super().__init__(visa_string)
 
     @property

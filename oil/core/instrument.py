@@ -19,11 +19,12 @@ class Instrument:
 
     def __init__(self, visa_string: str, log_func: Optional[Callable[[str], None]] = None):
         self.log_func = log_func if log_func else lambda x: None
-        rm = pyvisa.ResourceManager("@py")
+        self._visa_string = visa_string
+        self._rm = pyvisa.ResourceManager("@py")
         retry = True
         while True:
             try:
-                self._instr = rm.open_resource(visa_string)
+                self._connect()
 
             # Reraise IP Visa error as oil error (after a retry)
             except pyvisa.errors.VisaIOError as e:
@@ -46,10 +47,11 @@ class Instrument:
             # If we get here, we succeeded, break from the loop.
             break
 
-        # Because its raw socket, make sure terminations are good
-        if visa_string.endswith("SOCKET"):
-            self._instr.read_termination = "\n"
-            self._instr.write_termination = "\n"
+    def _connect(self) -> None:
+        self._instr = self._rm.open_resource(self._visa_string)
+        self._instr.read_termination = "\n"
+        self._instr.write_termination = "\n"
+        self._instr.timeout = 5_000
 
     def _command(self, cmd_string: str, auto_retry: bool = True) -> None:
 

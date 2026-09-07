@@ -5,4 +5,4 @@ def serial_port_string(com_port: int) -> str:
 
 
 def ip_address_string(ip_addr: str) -> str:
-    return f"TCPIP::{ip_addr}::INSTR"
+    return f"TCPIP0::{ip_addr}::INSTR"
