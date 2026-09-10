@@ -18,10 +18,35 @@ python -m pip install pyoil
 - Keysight E5071C vector network analyser
 - Keysight N9030 signal analyser
 - Dual-SP8T RF switch matrix
+- Pico Technology PT-104 temperature/resistance data logger
 
 The supported surface is deliberately small and explicit. Instrument- and
 firmware-specific behaviour still needs a physical-instrument smoke test
 before it is relied on in production.
+
+The PT-104 uses Pico's native `usbpt104` SDK rather than VISA/SCPI. Install
+PicoSDK separately, then use `oil.data_loggers.PT104`.
+
+With more than one USB PT-104 connected, discover and select devices by serial
+number. The default `serial_number=0` keeps the single-device convenience
+behaviour and opens the first device found:
+
+```python
+from oil.data_loggers import PT104
+
+serial_numbers = PT104.list_devices()
+logger = PT104()                         # first USB PT-104
+logger_two = PT104(serial_number=serial_numbers[1])
+```
+
+Each PT-104 exposes four parent-owned channel objects, indexed by integer:
+
+```python
+from oil.data_loggers import PT100
+
+logger.channel[1].probe_type = PT100
+temperature_c = logger.channel[1].read()
+```
 
 ## Instrument control
 

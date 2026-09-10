@@ -101,3 +101,6 @@ venv36/
 # Logs folder
 logs/
 /vna_test.py
+records/
+*.csv
+

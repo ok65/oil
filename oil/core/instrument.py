@@ -9,7 +9,18 @@ from typing import Callable, Optional
 from oil.core.errors import *
 
 
-class Instrument:
+class InstrumentBase:
+    """Common base for instrument drivers, independent of transport/protocol."""
+
+    def __init__(self, log_func: Optional[Callable[[str], None]] = None):
+        self.log_func = log_func if log_func else lambda x: None
+
+    def close(self) -> None:
+        """Release the instrument connection, if the driver has one."""
+
+
+class InstrumentSCPI(InstrumentBase):
+    """Instrument base for VISA-connected SCPI devices."""
 
     # Common SCIPI commands
     _RESET = "*RST"
@@ -18,7 +29,7 @@ class Instrument:
     _TEST = "*TST"
 
     def __init__(self, visa_string: str, log_func: Optional[Callable[[str], None]] = None):
-        self.log_func = log_func if log_func else lambda x: None
+        super().__init__(log_func)
         self._visa_string = visa_string
         self._rm = pyvisa.ResourceManager("@py")
         retry = True
@@ -46,6 +57,11 @@ class Instrument:
 
             # If we get here, we succeeded, break from the loop.
             break
+
+    def close(self) -> None:
+        if hasattr(self, "_instr"):
+            self._instr.close()
+
 
     def _connect(self) -> None:
         self._instr = self._rm.open_resource(self._visa_string)
@@ -118,4 +134,8 @@ class Instrument:
 
     def identify(self) -> str:
         return self._query(self._IDN)
+
+
+# Backwards-compatible name used by existing drivers and client code.
+Instrument = InstrumentSCPI
 
