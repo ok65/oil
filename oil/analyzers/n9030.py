@@ -1,6 +1,6 @@
 
 # Library imports
-from typing import Dict, List
+from typing import Any, Dict, List, Mapping, Optional
 
 # Project imports
 from oil.core.instrument import Instrument
@@ -24,8 +24,8 @@ class N9030(Instrument):
     # Instrument parameters
     _NUM_MARKERS = 12
 
-    def __init__(self, visa_string:str):
-        super().__init__(visa_string)
+    def __init__(self, visa_string:str, config: Optional[Mapping[str, Any]] = None):
+        super().__init__(visa_string, config=config)
         
         # Initialise list of markers (markers are 1-indexed)
         self._marker = {}

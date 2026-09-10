@@ -3,7 +3,7 @@
 import pyvisa
 import serial
 import time
-from typing import Callable, Optional
+from typing import Any, Callable, Mapping, Optional
 
 # Project imports
 from oil.core.errors import *
@@ -12,8 +12,19 @@ from oil.core.errors import *
 class InstrumentBase:
     """Common base for instrument drivers, independent of transport/protocol."""
 
-    def __init__(self, log_func: Optional[Callable[[str], None]] = None):
+    def __init__(self, log_func: Optional[Callable[[str], None]] = None,
+                 config: Optional[Mapping[str, Any]] = None):
         self.log_func = log_func if log_func else lambda x: None
+        if config is not None:
+            self.apply_config(config)
+
+    def apply_config(self, config: Mapping[str, Any]) -> None:
+        """Set writable driver properties from a parameter dictionary."""
+        for name, value in config.items():
+            if not isinstance(name, str) or not isinstance(
+                    getattr(type(self), name, None), property) or getattr(type(self), name).fset is None:
+                raise ValueError(f"Unknown or read-only instrument parameter: {name}")
+            setattr(self, name, value)
 
     def close(self) -> None:
         """Release the instrument connection, if the driver has one."""
@@ -28,7 +39,8 @@ class InstrumentSCPI(InstrumentBase):
     _IDN = "*IDN"
     _TEST = "*TST"
 
-    def __init__(self, visa_string: str, log_func: Optional[Callable[[str], None]] = None):
+    def __init__(self, visa_string: str, log_func: Optional[Callable[[str], None]] = None,
+                 config: Optional[Mapping[str, Any]] = None):
         super().__init__(log_func)
         self._visa_string = visa_string
         self._rm = pyvisa.ResourceManager("@py")
@@ -57,6 +69,8 @@ class InstrumentSCPI(InstrumentBase):
 
             # If we get here, we succeeded, break from the loop.
             break
+        if config is not None:
+            self.apply_config(config)
 
     def close(self) -> None:
         if hasattr(self, "_instr"):

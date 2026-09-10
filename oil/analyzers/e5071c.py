@@ -1,5 +1,5 @@
 # Library imports
-from typing import Dict, List
+from typing import Any, Dict, List, Mapping, Optional
 
 # Project imports
 from oil.core.instrument import Instrument
@@ -22,8 +22,14 @@ class E5071C(Instrument):
     _FREQ_STOP = "SENS1:FREQ:STOP"
     _FREQ_SPAN = "SENS1:FREQ:SPAN"
     _FREQ_POINTS = "SENS1:SWE:POIN"
+    _SWEEP_TYPE = "SENS1:SWE:TYPE"
 
     _IF_BW = "SENS1:BAND"
+    _AVERAGE = "SENS1:AVER"
+    _AVERAGE_COUNT = "SENS1:AVER:COUN"
+    _AVERAGE_CLEAR = "SENS1:AVER:CLE"
+    _SMOOTHING = "CALC1:SMO"
+    _SMOOTHING_APERTURE = "CALC1:SMO:APER"
     _SOURCE_POWER = "SOUR1:POW"
 
     _PULL_X_DATA = "CALC1:DATA:XAX"
@@ -41,13 +47,13 @@ class E5071C(Instrument):
     # Instrument parameters
     _NUM_MARKERS = 9
 
-    def __init__(self, visa_string: str):
+    def __init__(self, visa_string: str, config: Optional[Mapping[str, Any]] = None):
 
         # This vna gets funny, and needs raw socket
         if visa_string.endswith("::INSTR"):
             visa_string = visa_string[:-5] + "5025::SOCKET"
 
-        super().__init__(visa_string)
+        super().__init__(visa_string, config=config)
 
         # Markers are 1-indexed.
         self._marker = {
@@ -111,6 +117,67 @@ class E5071C(Instrument):
     def frequency_points(self, value: int) -> None:
         """ :param value: Sets the number of sweep points """
         self._command(f"{self._FREQ_POINTS} {value}")
+
+    @property
+    def sweep_type(self) -> str:
+        return self._query(self._SWEEP_TYPE).strip().upper()
+
+    @sweep_type.setter
+    def sweep_type(self, value: str) -> None:
+        value = value.upper()
+        if value not in {"LIN", "LOG"}:
+            raise ValueError("sweep_type must be 'LIN' or 'LOG'")
+        self._command(f"{self._SWEEP_TYPE} {value}")
+
+    @property
+    def if_bandwidth(self) -> float:
+        return float(self._query(self._IF_BW))
+
+    @if_bandwidth.setter
+    def if_bandwidth(self, value: float) -> None:
+        if value <= 0:
+            raise ValueError("if_bandwidth must be positive")
+        self._command(f"{self._IF_BW} {value}")
+
+    @property
+    def averaging_enabled(self) -> bool:
+        return bool(int(self._query(self._AVERAGE)))
+
+    @averaging_enabled.setter
+    def averaging_enabled(self, value: bool) -> None:
+        self._command(f"{self._AVERAGE} {'ON' if value else 'OFF'}")
+
+    @property
+    def averaging_count(self) -> int:
+        return int(float(self._query(self._AVERAGE_COUNT)))
+
+    @averaging_count.setter
+    def averaging_count(self, value: int) -> None:
+        if not isinstance(value, int) or not 1 <= value <= 999:
+            raise ValueError("averaging_count must be an integer from 1 to 999")
+        self._command(f"{self._AVERAGE_COUNT} {value}")
+
+    def restart_averaging(self) -> None:
+        """Clear the current average and begin a new averaging sequence."""
+        self._command(self._AVERAGE_CLEAR)
+
+    @property
+    def smoothing_enabled(self) -> bool:
+        return bool(int(self._query(self._SMOOTHING)))
+
+    @smoothing_enabled.setter
+    def smoothing_enabled(self, value: bool) -> None:
+        self._command(f"{self._SMOOTHING} {'ON' if value else 'OFF'}")
+
+    @property
+    def smoothing_aperture(self) -> float:
+        return float(self._query(self._SMOOTHING_APERTURE))
+
+    @smoothing_aperture.setter
+    def smoothing_aperture(self, value: float) -> None:
+        if not 0.05 <= value <= 25:
+            raise ValueError("smoothing_aperture must be between 0.05 and 25 percent")
+        self._command(f"{self._SMOOTHING_APERTURE} {value}")
 
     @property
     def source_power(self) -> float:

@@ -14,13 +14,13 @@ class SMR20(Instrument):
     _RFON = "OUTP1:STAT"
     _EXTREF = "ROSC:SOUR"
 
-    def __init__(self, visa_string: str):
+    def __init__(self, visa_string: str, config=None):
         """
         SMR20 instrument class
         :param visa_string: pyvisa connection string (use oil.serial_port_string() or oil.ip_address_string() as
                                                       helper functions, or refer to pyvisa documentation)
         """
-        super().__init__(visa_string)
+        super().__init__(visa_string, config=config)
 
     @property
     def frequency(self) -> float:

@@ -9,7 +9,7 @@ machines that do not have a PT-104 or PicoSDK installed.
 from ctypes import byref, c_int16, c_int32, c_uint32, create_string_buffer
 from enum import IntEnum
 from pathlib import Path
-from typing import Any, List, Optional, Union
+from typing import Any, List, Mapping, Optional, Union
 
 from oil.core.instrument import InstrumentBase
 from oil.core.virtual_instrument import VirtualInstrument
@@ -80,7 +80,8 @@ class PT104(InstrumentBase):
     _CT_USB = 0x00000001
 
     def __init__(self, serial_number: Optional[Union[str, int]] = 0,
-                 sdk_path: Optional[str] = None, sdk: Any = None):
+                 sdk_path: Optional[str] = None, sdk: Any = None,
+                 config: Optional[Mapping[str, Any]] = None):
         super().__init__()
         self._sdk = sdk if sdk is not None else self._load_sdk(sdk_path)
         self._handle = c_int16()
@@ -96,6 +97,8 @@ class PT104(InstrumentBase):
         status = self._sdk.UsbPt104OpenUnit(byref(self._handle), serial)
         self._check(status, "UsbPt104OpenUnit")
         self._closed = False
+        if config is not None:
+            self.apply_config(config)
 
     @classmethod
     def list_devices(cls, sdk_path: Optional[str] = None, sdk: Any = None) -> List[str]:

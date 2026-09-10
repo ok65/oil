@@ -1,5 +1,7 @@
 # Oliver's Instrument Library (`pyoil`)
 
+<img src="assets/oil-logo.png" alt="OIL project logo"  height="300">
+
 Oliver's Instrument Library is an open-source collection of test-equipment
 driver code that saves me from having to write the same instrument control
 layer over and over. It is built around [PyVISA](https://pyvisa.readthedocs.io/),
