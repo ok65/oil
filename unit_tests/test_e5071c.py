@@ -49,6 +49,20 @@ def test_e5071c_driver_downloads_interleaved_trace_data_from_selected_trace(e507
     assert virtual_instrument.query_log == ["CALC1:DATA:XAX?", "CALC1:DATA:FDAT?"]
 
 
+def test_e5071c_driver_ignores_stale_idn_response_during_trace_download(e5071c_driver, monkeypatch):
+    driver, _, _ = e5071c_driver
+    responses = iter([
+        "Agilient Technologies,E5071C,0,0\n10.0,20.0",
+        "Agilient Technologies,E5071C,0,0\n-9.0,0.0,-3.0,0.0",
+    ])
+    monkeypatch.setattr(driver, "_query", lambda *_args, **_kwargs: next(responses))
+
+    assert driver.download_trace() == {
+        "frequency": [10.0, 20.0],
+        "level": [-9.0, -3.0],
+    }
+
+
 def test_e5071c_marker_driver_uses_virtual_marker_contract(e5071c_driver):
     driver, virtual_instrument, _ = e5071c_driver
     virtual_instrument.write_memory("trace.1.frequency_data", [10.0, 20.0])

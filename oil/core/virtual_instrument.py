@@ -81,6 +81,9 @@ class VirtualInstrument:
 
         self.handle_command(command)
 
+    def clear(self) -> None:
+        """Match the VISA resource API used to flush pending input."""
+
     def query(self, command: str) -> str:
         """Accept a VISA-style query and dispatch it to the simulator."""
         self.query_log.append(command)

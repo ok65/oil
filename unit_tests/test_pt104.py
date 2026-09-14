@@ -35,6 +35,7 @@ class FakeSDK:
 
     def UsbPt104GetValue(self, handle, channel, value, filtered):
         if self.get_value_status:
+            value._obj.value = self.value
             return self.get_value_status
         value._obj.value = self.value
         self.calls.append(("read", channel, filtered))
@@ -74,12 +75,35 @@ def test_pt104_rejects_invalid_channel():
     logger.close()
 
 
-def test_pt104_reports_unconfigured_channel():
+def test_pt104_reports_when_no_sample_is_available():
     sdk = FakeSDK()
     sdk.get_value_status = 0x25
     logger = PT104(sdk=sdk)
-    with pytest.raises(PT104ChannelNotConfiguredError, match="channel 1 is not configured"):
+    with pytest.raises(PT104ChannelNotConfiguredError, match="has no sample available yet"):
         logger.read_temperature(1)
+    logger.close()
+
+
+def test_pt104_accepts_repeat_value_warning_for_rapid_reads():
+    sdk = FakeSDK()
+    sdk.get_value_status = 0x118
+    sdk.value = 23125
+    logger = PT104(sdk=sdk)
+    logger.configure_channel(1, PT100)
+
+    assert logger.read(1) == pytest.approx(23.125)
+    logger.close()
+
+
+def test_pt104_waits_for_samples_on_enabled_channels():
+    sdk = FakeSDK()
+    sdk.get_value_status = 0x25
+    logger = PT104(sdk=sdk)
+    logger.configure_channel(1, PT100)
+
+    sdk.get_value_status = 0
+    logger.wait_for_samples(timeout=0.1)
+    assert any(call[0] == "read" for call in sdk.calls)
     logger.close()
 
 

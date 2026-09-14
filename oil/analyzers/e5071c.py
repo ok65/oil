@@ -291,6 +291,13 @@ class E5071C(Instrument):
         :return: Dict containing 'frequency' and 'power' lists.
         """
 
+        # The E5071C uses a raw socket and can leave an earlier response
+        # (commonly *IDN?) queued in the receive buffer.  Flush it before
+        # starting the trace transaction so the first query gets its own data.
+        clear = getattr(self._instr, "clear", None)
+        if clear is not None:
+            clear()
+
         # Select requested trace on channel 1.
         self._command(f"CALC1:PAR{trace_id}:SEL")
 
@@ -299,16 +306,35 @@ class E5071C(Instrument):
         # Pull the actual X-axis values from the analyser. This also supports
         # non-uniform/segmented sweeps.
         x_data = self._query(self._PULL_X_DATA, qm=True)
-        data["frequency"] = [float(d) for d in x_data.split(",")]
+        data["frequency"] = self._parse_numeric_csv(x_data)
 
         # FDAT returns two values per sweep point. For normal rectangular
         # formats the first is the displayed value and the second is zero.
         y_data = self._query(self._PULL_Y_DATA, qm=True)
-        y_values = [float(d) for d in y_data.split(",")]
+        y_values = self._parse_numeric_csv(y_data)
 
         data["level"] = y_values[::2]
 
         return data
+
+    @staticmethod
+    def _parse_numeric_csv(response: str) -> List[float]:
+        """Parse trace CSV while ignoring stale text responses in the socket.
+
+        The E5071C is sometimes left with an earlier ``*IDN?`` response in
+        its raw-socket receive buffer.  VISA then returns that line together
+        with the trace response.  Only accept a complete numeric CSV line so
+        that the identification text cannot be mistaken for trace samples.
+        """
+        for line in response.splitlines():
+            fields = [field.strip() for field in line.split(",")]
+            if not fields or any(not field for field in fields):
+                continue
+            try:
+                return [float(field) for field in fields]
+            except ValueError:
+                continue
+        raise ValueError("E5071C trace response did not contain numeric CSV data")
 
 
 class VirtualE5071C(VirtualInstrument):

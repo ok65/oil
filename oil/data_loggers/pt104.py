@@ -9,6 +9,7 @@ machines that do not have a PT-104 or PicoSDK installed.
 from ctypes import byref, c_int16, c_int32, c_uint32, create_string_buffer
 from enum import IntEnum
 from pathlib import Path
+from time import monotonic, sleep
 from typing import Any, List, Mapping, Optional, Union
 
 from oil.core.instrument import InstrumentBase
@@ -29,8 +30,19 @@ PT100 = PT104DataType.PT100
 PT1000 = PT104DataType.PT1000
 
 
-class PT104ChannelNotConfiguredError(RuntimeError):
-    """Raised when a reading is requested from an unconfigured PT-104 channel."""
+class PT104NoSamplesAvailableError(RuntimeError):
+    """Raised when the PT-104 has not produced a sample yet."""
+
+
+# Retain the old public name for callers that imported it.  The SDK status
+# previously mapped to this name was actually PICO_NO_SAMPLES_AVAILABLE.
+PT104ChannelNotConfiguredError = PT104NoSamplesAvailableError
+
+
+# The PT-104 returns the most recent sample with this warning when a new
+# conversion is not ready yet (for example, while reading several channels
+# immediately after configuring them).  It is not a failed read.
+_PICO_WARNING_REPEAT_VALUE = 0x118
 
 
 class _PT104Info(IntEnum):
@@ -174,17 +186,47 @@ class PT104(InstrumentBase):
             self._handle, int(channel), byref(value), int(filtered),
         )
         if int(status) == 0x25:
-            raise PT104ChannelNotConfiguredError(
-                f"PT-104 channel {channel} is not configured; "
-                "configure its probe type before reading it."
+            raise PT104NoSamplesAvailableError(
+                f"PT-104 channel {channel} has no sample available yet; "
+                "wait for the first conversion before reading it."
             )
-        self._check(status, "UsbPt104GetValue")
+        if int(status) not in (0, _PICO_WARNING_REPEAT_VALUE):
+            self._check(status, "UsbPt104GetValue")
         data_type = self._channels.get(channel, (None, None))[0]
         if data_type in (PT104DataType.PT100, PT104DataType.PT1000):
             return value.value / 1000.0
         return float(value.value)
 
     read_temperature = read
+
+    def wait_for_samples(self, timeout: float = 10.0,
+                         poll_interval: float = 0.05) -> None:
+        """Block until every enabled channel has produced a sample.
+
+        The PT-104 scans enabled channels continuously.  A newly configured
+        device can therefore report ``PICO_NO_SAMPLES_AVAILABLE`` until the
+        first scan has completed.
+        """
+        if timeout < 0 or poll_interval < 0:
+            raise ValueError("timeout and poll_interval must not be negative")
+        channels = [channel for channel, (data_type, _wires) in self._channels.items()
+                    if data_type != PT104DataType.OFF]
+        deadline = monotonic() + timeout
+        pending = set(channels)
+        while pending:
+            for channel in tuple(pending):
+                try:
+                    self.read(channel)
+                except PT104NoSamplesAvailableError:
+                    continue
+                pending.remove(channel)
+            if pending and monotonic() >= deadline:
+                raise TimeoutError(
+                    f"PT-104 did not produce samples for channel(s): "
+                    f"{', '.join(map(str, sorted(pending)))}"
+                )
+            if pending:
+                sleep(min(poll_interval, max(0.0, deadline - monotonic())))
 
     @staticmethod
     def _validate_channel(channel: int) -> None:
