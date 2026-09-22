@@ -159,7 +159,7 @@ Properties:
 | `frequency_points` | `int` | Number of sweep points; read-only |
 | `ref_level` | `float` | Reference level in dBm |
 | `input_attenuation` | `float` | Input attenuation in dB; `0` represents AUTO on readback |
-| `bandwidth_setting` | `int` | Resolution-bandwidth selection; `0` represents AUTO |
+| `rbw` | `float` | Resolution bandwidth in kHz |
 | `marker` | `dict` | Markers indexed from 1 to 12 |
 
 Example:
@@ -171,7 +171,7 @@ analyser.frequency_stop = 3_000_000
 analyser.frequency_span = 1_000_000
 analyser.ref_level = -10
 analyser.input_attenuation = 20
-analyser.bandwidth_setting = 3
+analyser.rbw = 10  # kHz
 
 analyser.marker[1].enabled = True
 analyser.marker[1].frequency = 2_500_000

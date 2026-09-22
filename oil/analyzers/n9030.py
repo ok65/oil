@@ -17,9 +17,10 @@ class N9030(Instrument):
     _FREQ_SPAN = "FREQ:SPAN"
     _REF_LEVEL = "DISP:WIND1:TRAC:Y:RLEV"
     _ATTEN = "POW:RF:ATT"
-    _BW = "BAND:SEL"
+    _BW = "BAND:RES"
     _PULL_DATA = ":TRAC:DATA? TRACE"
     _FREQ_POINTS = "SENS:SWE:POIN"
+    _PEAKS = "CALC:DATA1:PEAKS"
 
     # Instrument parameters
     _NUM_MARKERS = 12
@@ -104,40 +105,22 @@ class N9030(Instrument):
         self._command(f"{self._ATTEN} {value}")
 
     @property
-    def bandwidth_setting(self) -> int:
-        """ :return: Returns the current setting of the resolution bandwidth auto setting. The output
-                     corresponds to the RBWn setting, as defined in the user manuals. A value of 0 refers
-                     to AUTO.
-                     This setting it used to set the way RBW is defined (as a product of the frequency)
-                     rather than setting an absolute value. Default is auto.
-         """
-        result = self._query(f"{self._BW}")
-        if "RBW1" in result:
-            return 1
-        if "RBW2" in result:
-            return 2
-        if "RBW3" in result:
-            return 3
-        if "RBW4" in result:
-            return 4
-        if "RBW5" in result:
-            return 5
-        if "RBW6" in result:
-            return 6
-        if "AUTO" in result:
-            return 0
-        raise Exception()
+    def rbw(self) -> float:
+        """Return the resolution bandwidth (RBW) in kHz."""
+        result = self._query(self._BW)
+        parts = result.split()
+        value = float(parts[0])
+        # SCPI frequency queries are normally returned in Hz.  Accept a
+        # unit-bearing response too, which is useful for simulators and
+        # instruments configured to return engineering units.
+        return value if len(parts) > 1 and parts[1].lower() == "khz" else value / 1_000
 
-    @bandwidth_setting.setter
-    def bandwidth_setting(self, value: int) -> None:
-        """ :param value: Sets the current setting of the resolution bandwidth auto setting. The output
-                          corresponds to the RBWn setting, as defined in the user manuals. A value of 0 refers
-                          to AUTO.
-                          This setting it used to set the way RBW is defined (as a product of the frequency)
-                          rather than setting an absolute value. Default is auto.
-         """
-        bw = f"RBW{value}" if value > 0 else "AUTO"
-        self._command(f"{self._BW} {bw}")
+    @rbw.setter
+    def rbw(self, value: float) -> None:
+        """Set the resolution bandwidth (RBW) in kHz."""
+        if value <= 0:
+            raise ValueError("rbw must be positive, in kHz")
+        self._command(f"{self._BW} {value:g} kHz")
 
     def download_trace(self, trace_id: int = 1) -> Dict:
         """
@@ -154,8 +137,28 @@ class N9030(Instrument):
         data["frequency"] = [round((x*step)+start, 1) for x in range(points)]
 
         data_str = self._query(f"{self._PULL_DATA}{trace_id}", qm=False)
-        data["power"] = [float(d) for d in data_str.split(",")]
+        data["power"] = self._parse_numeric_csv(data_str)
         return data
+
+    def get_peaks_table(self, threshold: float = -200.0, excursion: float = 0.0,
+              order: str = "AMPLitude", max_results: Optional[int] = None) -> List[Dict[str, float]]:
+        """Return the active trace's peaks as amplitude/frequency rows."""
+        if max_results is not None and max_results < 0:
+            raise ValueError("max_results must be non-negative or None")
+        order_map = {"amplitude": "AMPLitude", "frequency": "FREQuency", "time": "TIME"}
+        try:
+            scpi_order = order_map[order.lower()]
+        except (AttributeError, KeyError) as error:
+            raise ValueError("order must be 'amplitude', 'frequency', or 'time'") from error
+        values = self._parse_numeric_csv(
+            self._query(self._PEAKS, parameters=f"{threshold},{excursion},{scpi_order}")
+        )
+        count = int(values[0])
+        rows = [{"amplitude": values[index], "frequency": values[index + 1]}
+                for index in range(1, min(len(values), 1 + count * 2), 2)]
+        return rows if max_results is None else rows[:max_results]
+
+    peaks = get_peaks_table
 
 
 class N9030_Marker(Marker):
@@ -223,7 +226,7 @@ class VirtualN9030(VirtualInstrument):
     _FREQ_SPAN = "FREQ:SPAN"
     _REF_LEVEL = "DISP:WIND1:TRAC:Y:RLEV"
     _ATTEN = "POW:RF:ATT"
-    _BW = "BAND:SEL"
+    _BW = "BAND:RES"
     _FREQ_POINTS = "SENS:SWE:POIN"
 
     _FREQUENCY_CENTER_KEY = "frequency.center.hz"
@@ -267,8 +270,14 @@ class VirtualN9030(VirtualInstrument):
             attenuation = "AUTO" if value == "AUTO" else float(value)
             self.write_memory(self._INPUT_ATTENUATION_KEY, attenuation)
             return
-        if prefix == self._BW and (value == "AUTO" or value.startswith("RBW")):
-            self.write_memory(self._BANDWIDTH_KEY, value)
+        if prefix == self._BW:
+            parts = value.split()
+            if len(parts) not in (1, 2) or (len(parts) == 2 and parts[1].lower() != "khz"):
+                raise ValueError(f"Invalid resolution bandwidth: {value}")
+            bandwidth_khz = float(parts[0]) if len(parts) == 2 else float(parts[0]) / 1_000
+            if bandwidth_khz <= 0:
+                raise ValueError(f"Invalid resolution bandwidth: {value}")
+            self.write_memory(self._BANDWIDTH_KEY, bandwidth_khz)
             return
 
         normalized = prefix.lstrip(":")
@@ -288,13 +297,16 @@ class VirtualN9030(VirtualInstrument):
             f"{self._BW}?": self._BANDWIDTH_KEY,
         }
         if command in query_keys:
-            return str(self.read_memory(query_keys[command]))
+            value = self.read_memory(query_keys[command])
+            return f"{value} kHz" if command == f"{self._BW}?" else str(value)
         if command == f"{self._ATTEN}?":
             return str(self.read_memory(self._INPUT_ATTENUATION_KEY))
         if command.startswith(":TRAC:DATA? TRACE"):
             trace_id = self._parse_trace_id(command)
             self._ensure_trace(trace_id)
             return self._csv(self.read_memory(self._trace_key(trace_id)))
+        if command.startswith("CALC:DATA1:PEAKS?"):
+            return self.read_memory("peaks.csv", "0")
 
         normalized = command.lstrip(":")
         if normalized.startswith("CALC:MARK"):
@@ -310,7 +322,8 @@ class VirtualN9030(VirtualInstrument):
             self._FREQUENCY_POINTS_KEY: 3,
             self._REFERENCE_LEVEL_KEY: 0.0,
             self._INPUT_ATTENUATION_KEY: "AUTO",
-            self._BANDWIDTH_KEY: "AUTO",
+            self._BANDWIDTH_KEY: 10.0,
+            "peaks.csv": "3,-10.0,1000000.0,-20.0,1500000.0,-15.0,2000000.0",
         })
         self._ensure_trace(1)
 

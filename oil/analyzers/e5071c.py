@@ -317,26 +317,6 @@ class E5071C(Instrument):
 
         return data
 
-    @staticmethod
-    def _parse_numeric_csv(response: str) -> List[float]:
-        """Parse trace CSV while ignoring stale text responses in the socket.
-
-        The E5071C is sometimes left with an earlier ``*IDN?`` response in
-        its raw-socket receive buffer.  VISA then returns that line together
-        with the trace response.  Only accept a complete numeric CSV line so
-        that the identification text cannot be mistaken for trace samples.
-        """
-        for line in response.splitlines():
-            fields = [field.strip() for field in line.split(",")]
-            if not fields or any(not field for field in fields):
-                continue
-            try:
-                return [float(field) for field in fields]
-            except ValueError:
-                continue
-        raise ValueError("E5071C trace response did not contain numeric CSV data")
-
-
 class VirtualE5071C(VirtualInstrument):
     """Stateful simulator for the E5071C commands implemented by ``E5071C``."""
 

@@ -4,7 +4,7 @@ def test_n9030_driver_constructs_markers_and_uses_expected_scpi(n9030_driver):
     driver.frequency_center = 2_500_000.4
     driver.ref_level = -10.2
     driver.input_attenuation = 20
-    driver.bandwidth_setting = 3
+    driver.rbw = 10
 
     assert resource_manager.opened_addresses == ["TCPIP::127.0.0.1::INSTR"]
     assert len(driver.marker) == 12
@@ -12,12 +12,12 @@ def test_n9030_driver_constructs_markers_and_uses_expected_scpi(n9030_driver):
         "FREQ:CENT 2500000",
         "DISP:WIND1:TRAC:Y:RLEV -10 dBm",
         "POW:RF:ATT 20",
-        "BAND:SEL RBW3",
+        "BAND:RES 10 kHz",
     ]
     assert driver.frequency_center == 2_500_000.0
     assert driver.ref_level == -10.0
     assert driver.input_attenuation == 20.0
-    assert driver.bandwidth_setting == 3
+    assert driver.rbw == 10.0
 
 
 def test_n9030_driver_downloads_trace_with_both_frequency_endpoints(n9030_driver):
@@ -36,6 +36,21 @@ def test_n9030_driver_downloads_trace_with_both_frequency_endpoints(n9030_driver
         "SENS:SWE:POIN?",
         ":TRAC:DATA? TRACE2",
     ]
+
+
+def test_n9030_driver_reads_peak_table_with_order_and_limit(n9030_driver):
+    driver, virtual_instrument, _ = n9030_driver
+
+    result = driver.get_peaks_table(threshold=-40, excursion=6,
+                                    order="frequency", max_results=2)
+
+    assert result == [
+        {"amplitude": -10.0, "frequency": 1_000_000.0},
+        {"amplitude": -20.0, "frequency": 1_500_000.0},
+    ]
+    assert virtual_instrument.query_log[-1] == (
+        "CALC:DATA1:PEAKS? -40,6,FREQuency"
+    )
 
 
 def test_n9030_marker_driver_uses_virtual_marker_contract(n9030_driver):

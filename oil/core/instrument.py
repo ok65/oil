@@ -3,7 +3,7 @@
 import pyvisa
 import serial
 import time
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, List, Mapping, Optional
 
 # Project imports
 from oil.core.errors import *
@@ -107,11 +107,17 @@ class InstrumentSCPI(InstrumentBase):
         if failed:
             raise CommsTimeoutError(f"Retry({auto_retry}), {cmd_string}")
 
-    def _query(self, qry_string: str, qm: bool = True, auto_retry: bool = True) -> str:
+    def _query(self, qry_string: str, parameters: Optional[str] = None,
+               qm: bool = True, auto_retry: bool = True) -> str:
 
         # Prepare question mark, message string and failed/result vars
-        qm = "?" if qm else ""
-        msg = f"{qry_string}{qm}"
+        # Parameters belong after the query marker, e.g. ``VOLT? MAX``.
+        # Keep ``qm`` for compatibility with existing callers that query a
+        # command which already includes its own question mark.
+        query_marker = "?" if qm and not qry_string.rstrip().endswith("?") else ""
+        msg = f"{qry_string}{query_marker}"
+        if parameters:
+            msg = f"{msg} {parameters}"
         failed = False
         result = None
 
@@ -139,6 +145,19 @@ class InstrumentSCPI(InstrumentBase):
         # Everything was good, return the result
         else:
             return result
+
+    @staticmethod
+    def _parse_numeric_csv(response: str) -> List[float]:
+        """Return the first complete numeric CSV line, ignoring socket chaff."""
+        for line in response.splitlines():
+            fields = [field.strip() for field in line.split(",")]
+            if not fields or any(not field for field in fields):
+                continue
+            try:
+                return [float(field) for field in fields]
+            except ValueError:
+                continue
+        raise ValueError("Instrument response did not contain numeric CSV data")
 
     def reset(self) -> None:
         self._command(self._RESET)
