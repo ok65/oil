@@ -1,0 +1,43 @@
+# Copy this file to instruments.local.yaml and edit connection details for
+# your equipment. Keep machine-specific connection files out of Git.
+instruments:
+  signal_generator:
+    type: SMR20
+    expected_model: "SMR20"
+    visa: "TCPIP0::192.168.1.20::INSTR"
+    settings:
+      frequency: 1000000
+      power: -10
+
+  analyser:
+    type: N9030
+    expected_model: "N9030A"
+    visa: "TCPIP0::192.168.1.21::INSTR"
+    settings:
+      frequency_center: 2500000
+      rbw: 10000  # Hz
+
+  vna:
+    type: E5071C
+    expected_model: "E5071C"
+    visa: "TCPIP0::192.168.1.22::INSTR"
+
+  switch:
+    type: RFSwitchMatrix
+    expected_model: "RF Switch Matrix"
+    visa: "TCPIP0::192.168.1.23::INSTR"
+
+  temperature_logger:
+    type: PT104
+    expected_model: "PT-104"
+    serial_number: "CT264/118"
+
+# Optional fixed-address DHCP service. Start separately with:
+# python -m oil.dhcp_server instruments.local.yaml
+dhcp_server:
+  interface: "Ethernet 2"  # Must match the OS network-interface name.
+  router: "192.168.50.1"
+  dns: ["192.168.50.1"]
+  reservations:
+    "AA-BB-CC-DD-EE-FF": "192.168.50.20"
+    "11-22-33-44-55-66": "192.168.50.21"

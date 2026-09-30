@@ -27,6 +27,60 @@ tcp_resource = ip_address_string("192.168.1.20")  # TCPIP0::192.168.1.20::INSTR
 serial_resource = serial_port_string(7)             # ASRL7::INSTR
 ```
 
+## Loading instruments from YAML
+
+Keep machine-specific VISA addresses and PT-104 serial numbers in a local YAML
+file rather than in test scripts. Copy `oil/config.example.yaml` to
+`instruments.local.yaml`, edit its connection details, and load the configured
+instances by name:
+
+```python
+from oil import load_instruments
+
+instruments = load_instruments("instruments.local.yaml")
+generator = instruments["signal_generator"]
+analyser = instruments["analyser"]
+
+generator.frequency = 2_000_000
+print(analyser.download_trace())
+
+for instrument in instruments.values():
+    instrument.close()
+```
+
+Each entry has a supported driver `type`, connection fields, and optional
+`expected_model` substring and `settings`. The loader queries each instrument's
+identification string and requires it to contain the configured model name,
+case-insensitively. Settings are applied through the driver's writable
+properties immediately after connecting. See `oil/config.example.yaml` for all
+supported instrument types and the expected connection fields. If a
+configuration entry or identity check fails, instances created in that load
+are closed and the loader raises an exception.
+
+## Fixed-address DHCP service
+
+The optional fixed-address DHCP service is in `oil/dhcp_server.py`. Add a
+`dhcp_server` section to the same local YAML file with one interface name and a
+`reservations` mapping from MAC addresses to IP addresses. The interface must
+have a static IPv4 address; each reservation must be a unique address on that
+interface's subnet. Only listed MAC addresses receive DHCP replies. The
+service has no dynamic pool and grants infinite DHCP leases for configured
+addresses.
+
+On Windows, run `start_dhcp_server.bat` as Administrator to start it in a
+separate minimized console. It reads `instruments.local.yaml` beside the batch
+file. Port 67 must be available. From Python, query the service with:
+
+```python
+from oil import is_dhcp_server_running
+
+if is_dhcp_server_running("instruments.local.yaml"):
+    print("DHCP service is running")
+```
+
+`python -m oil.dhcp_server instruments.local.yaml --status` provides the same
+check from a command prompt.
+
 SCPI drivers connect when instantiated and provide these common methods:
 
 ```python
@@ -159,7 +213,7 @@ Properties:
 | `frequency_points` | `int` | Number of sweep points; read-only |
 | `ref_level` | `float` | Reference level in dBm |
 | `input_attenuation` | `float` | Input attenuation in dB; `0` represents AUTO on readback |
-| `rbw` | `float` | Resolution bandwidth in kHz |
+| `rbw` | `float` | Resolution bandwidth in Hz |
 | `marker` | `dict` | Markers indexed from 1 to 12 |
 
 Example:
@@ -171,7 +225,7 @@ analyser.frequency_stop = 3_000_000
 analyser.frequency_span = 1_000_000
 analyser.ref_level = -10
 analyser.input_attenuation = 20
-analyser.rbw = 10  # kHz
+analyser.rbw = 10_000  # Hz
 
 analyser.marker[1].enabled = True
 analyser.marker[1].frequency = 2_500_000

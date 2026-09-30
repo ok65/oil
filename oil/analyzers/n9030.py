@@ -106,21 +106,20 @@ class N9030(Instrument):
 
     @property
     def rbw(self) -> float:
-        """Return the resolution bandwidth (RBW) in kHz."""
+        """Return the resolution bandwidth (RBW) in Hz."""
         result = self._query(self._BW)
         parts = result.split()
         value = float(parts[0])
-        # SCPI frequency queries are normally returned in Hz.  Accept a
-        # unit-bearing response too, which is useful for simulators and
-        # instruments configured to return engineering units.
-        return value if len(parts) > 1 and parts[1].lower() == "khz" else value / 1_000
+        if len(parts) > 1 and parts[1].lower() == "khz":
+            return value * 1_000
+        return value
 
     @rbw.setter
     def rbw(self, value: float) -> None:
-        """Set the resolution bandwidth (RBW) in kHz."""
+        """Set the resolution bandwidth (RBW) in Hz."""
         if value <= 0:
-            raise ValueError("rbw must be positive, in kHz")
-        self._command(f"{self._BW} {value:g} kHz")
+            raise ValueError("rbw must be positive, in Hz")
+        self._command(f"{self._BW} {value:g} Hz")
 
     def download_trace(self, trace_id: int = 1) -> Dict:
         """
@@ -272,12 +271,14 @@ class VirtualN9030(VirtualInstrument):
             return
         if prefix == self._BW:
             parts = value.split()
-            if len(parts) not in (1, 2) or (len(parts) == 2 and parts[1].lower() != "khz"):
+            if len(parts) not in (1, 2) or (len(parts) == 2 and parts[1].lower() not in ("hz", "khz")):
                 raise ValueError(f"Invalid resolution bandwidth: {value}")
-            bandwidth_khz = float(parts[0]) if len(parts) == 2 else float(parts[0]) / 1_000
-            if bandwidth_khz <= 0:
+            bandwidth_hz = float(parts[0])
+            if len(parts) == 2 and parts[1].lower() == "khz":
+                bandwidth_hz *= 1_000
+            if bandwidth_hz <= 0:
                 raise ValueError(f"Invalid resolution bandwidth: {value}")
-            self.write_memory(self._BANDWIDTH_KEY, bandwidth_khz)
+            self.write_memory(self._BANDWIDTH_KEY, bandwidth_hz)
             return
 
         normalized = prefix.lstrip(":")
@@ -298,7 +299,7 @@ class VirtualN9030(VirtualInstrument):
         }
         if command in query_keys:
             value = self.read_memory(query_keys[command])
-            return f"{value} kHz" if command == f"{self._BW}?" else str(value)
+            return f"{value} Hz" if command == f"{self._BW}?" else str(value)
         if command == f"{self._ATTEN}?":
             return str(self.read_memory(self._INPUT_ATTENUATION_KEY))
         if command.startswith(":TRAC:DATA? TRACE"):
@@ -322,7 +323,7 @@ class VirtualN9030(VirtualInstrument):
             self._FREQUENCY_POINTS_KEY: 3,
             self._REFERENCE_LEVEL_KEY: 0.0,
             self._INPUT_ATTENUATION_KEY: "AUTO",
-            self._BANDWIDTH_KEY: 10.0,
+            self._BANDWIDTH_KEY: 10_000.0,
             "peaks.csv": "3,-10.0,1000000.0,-20.0,1500000.0,-15.0,2000000.0",
         })
         self._ensure_trace(1)

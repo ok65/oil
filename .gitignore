@@ -104,3 +104,6 @@ logs/
 records/
 *.csv
 
+# Machine-specific instrument connection settings
+instruments.local.yaml
+

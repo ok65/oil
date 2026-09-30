@@ -29,6 +29,8 @@ setup(
         'pyvisa-py',
         'pyserial',
         'matplotlib',
+        'PyYAML',
+        'psutil',
     ],
     license="WTFPL",
     python_requires=">=3.9",

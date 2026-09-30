@@ -26,6 +26,25 @@ class InstrumentBase:
                 raise ValueError(f"Unknown or read-only instrument parameter: {name}")
             setattr(self, name, value)
 
+    def identify(self) -> str:
+        """Return the connected instrument's identification string."""
+        raise NotImplementedError("This instrument does not provide identification")
+
+    def validate_instrument(self, expected_model: str) -> str:
+        """Check that the connected instrument identifies as the expected model.
+
+        Search for the model substring because IDN fields vary by vendor and
+        firmware. Return the complete IDN response when validation succeeds.
+        """
+        if not isinstance(expected_model, str) or not expected_model.strip():
+            raise ValueError("expected_model must be a non-empty string")
+        identity = self.identify()
+        if expected_model.casefold() not in identity.casefold():
+            raise InstrumentIdentityError(
+                f"Expected instrument model {expected_model!r}, got IDN {identity!r}"
+            )
+        return identity
+
     def close(self) -> None:
         """Release the instrument connection, if the driver has one."""
 

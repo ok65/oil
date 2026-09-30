@@ -1,4 +1,6 @@
 from oil.core.helper import *
+from oil.config import load_instruments
+from oil.dhcp_server import is_dhcp_server_running
 from importlib.metadata import PackageNotFoundError, version as distribution_version
 from pathlib import Path
 

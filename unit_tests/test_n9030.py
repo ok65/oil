@@ -4,7 +4,7 @@ def test_n9030_driver_constructs_markers_and_uses_expected_scpi(n9030_driver):
     driver.frequency_center = 2_500_000.4
     driver.ref_level = -10.2
     driver.input_attenuation = 20
-    driver.rbw = 10
+    driver.rbw = 10_000
 
     assert resource_manager.opened_addresses == ["TCPIP::127.0.0.1::INSTR"]
     assert len(driver.marker) == 12
@@ -12,12 +12,12 @@ def test_n9030_driver_constructs_markers_and_uses_expected_scpi(n9030_driver):
         "FREQ:CENT 2500000",
         "DISP:WIND1:TRAC:Y:RLEV -10 dBm",
         "POW:RF:ATT 20",
-        "BAND:RES 10 kHz",
+        "BAND:RES 10000 Hz",
     ]
     assert driver.frequency_center == 2_500_000.0
     assert driver.ref_level == -10.0
     assert driver.input_attenuation == 20.0
-    assert driver.rbw == 10.0
+    assert driver.rbw == 10_000.0
 
 
 def test_n9030_driver_downloads_trace_with_both_frequency_endpoints(n9030_driver):
