@@ -139,6 +139,42 @@ frequency_hz,generator_power_dbm,measured_power_dbm,timestamp
 1000000,-20,-20.14,2026-09-07-22:32:08
 ```
 
+To publish each record as a JSON document instead, install `pyoil[mqtt]` and
+use `MQTTTestRecord` with a connected Paho client. For a broker that requires
+mutual TLS, configure the CA certificate, client certificate, and private key
+on the client before connecting:
+
+```python
+import paho.mqtt.client as mqtt
+from oil.test_manager import MQTTTestRecord
+
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+client.tls_set(
+    ca_certs="/path/to/broker-ca.pem",
+    certfile="/path/to/client-cert.pem",
+    keyfile="/path/to/client-key.pem",
+)
+client.connect("mqtt.example.com", 8883)
+client.loop_start()
+try:
+    record = MQTTTestRecord(
+        "oil/tests", ["frequency_hz", "measured_power_dbm"], client
+    )
+    record.write({"frequency_hz": 1_000_000, "measured_power_dbm": -20.14})
+finally:
+    client.disconnect()
+    client.loop_stop()
+```
+
+`MQTTTestRecord.write()` uses the same declared-column filtering, blank values
+for missing columns, and local timestamp format as CSV records. JSON numbers
+remain numbers. The publish uses QoS 1 and waits up to 10 seconds for the broker
+acknowledgement; a failure or timeout raises an exception. The caller owns the
+client connection and network loop. MQTT publishing does not keep a local copy;
+write a CSV record as well if one is needed.
+The TLS certificate paths belong to the Paho client setup, so they are not
+passed to `MQTTTestRecord`. Keep the private key out of the repository.
+
 ## Test logging
 
 Each `TestManager` configures an `oil` logger. Informational progress is shown

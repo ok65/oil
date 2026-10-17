@@ -32,6 +32,9 @@ setup(
         'PyYAML',
         'psutil',
     ],
+    extras_require={
+        'mqtt': ['paho-mqtt>=2,<3'],
+    },
     license="WTFPL",
     python_requires=">=3.9",
     classifiers=[

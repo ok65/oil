@@ -1,9 +1,13 @@
 
 # Library imports
-from typing import List, Dict
+from typing import List, Dict, TYPE_CHECKING
 from pathlib import Path
 import csv
+import json
 from datetime import datetime
+
+if TYPE_CHECKING:
+    from paho.mqtt.client import Client
 
 
 class TestRecord:
@@ -59,3 +63,38 @@ class TestRecord:
     def _timestamp() -> str:
         now = datetime.now()
         return now.strftime("%Y-%m-%d-%H:%M:%S")
+
+
+class MQTTTestRecord:
+    """Publish timestamped test records as JSON through a connected MQTT client.
+
+    The caller owns the client's connection, network loop, and cleanup.
+    """
+
+    def __init__(self, topic: str, columns: List[str], client: "Client", publish_timeout: float = 10.0):
+        if not topic or "+" in topic or "#" in topic:
+            raise ValueError("topic must be a non-empty MQTT publish topic without wildcards")
+        if publish_timeout <= 0:
+            raise ValueError("publish_timeout must be positive")
+
+        self.topic = topic
+        self.columns = list(columns)
+        self.client = client
+        self.publish_timeout = publish_timeout
+
+    def write(self, row_data: Dict) -> None:
+        """Publish one JSON object, waiting for its QoS 1 acknowledgement."""
+        record = {column: row_data.get(column, "") for column in self.columns}
+        record["timestamp"] = TestRecord._timestamp()
+        payload = json.dumps(record, allow_nan=False)
+
+        info = self.client.publish(self.topic, payload, qos=1, retain=False)
+        if info.rc != 0:
+            raise RuntimeError(f"MQTT publish failed for topic {self.topic!r} (rc={info.rc})")
+
+        try:
+            info.wait_for_publish(timeout=self.publish_timeout)
+        except (RuntimeError, ValueError) as error:
+            raise RuntimeError(f"MQTT publish failed for topic {self.topic!r}") from error
+        if not info.is_published():
+            raise TimeoutError(f"MQTT publish timed out for topic {self.topic!r}")

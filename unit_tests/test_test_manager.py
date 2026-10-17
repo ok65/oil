@@ -1,7 +1,10 @@
 import csv
+import json
 from io import StringIO
 from types import SimpleNamespace
 from unittest.mock import Mock
+
+import pytest
 
 import oil.test_manager.log as log_module
 import oil.test_manager.test_manager as manager_module
@@ -131,6 +134,62 @@ def test_record_creates_headers_and_writes_filtered_timestamped_rows(monkeypatch
         "power": "",
         "timestamp": "2026-09-07-12:00:00",
     }]
+
+
+def test_mqtt_record_publishes_json_and_waits_for_acknowledgement(monkeypatch):
+    monkeypatch.setattr(record_module.TestRecord, "_timestamp", staticmethod(lambda: "2026-09-07-12:00:00"))
+    info = Mock(rc=0)
+    info.is_published.return_value = True
+    client = Mock()
+    client.publish.return_value = info
+    record = record_module.MQTTTestRecord("oil/tests", ["frequency_hz", "power_dbm"], client)
+
+    record.write({"frequency_hz": 1_000_000, "ignored": "value"})
+
+    args, kwargs = client.publish.call_args
+    assert args[0] == "oil/tests"
+    assert json.loads(args[1]) == {
+        "frequency_hz": 1_000_000,
+        "power_dbm": "",
+        "timestamp": "2026-09-07-12:00:00",
+    }
+    assert kwargs == {"qos": 1, "retain": False}
+    info.wait_for_publish.assert_called_once_with(timeout=10.0)
+
+
+def test_mqtt_record_reports_publish_failure_without_waiting():
+    info = Mock(rc=4)
+    client = Mock()
+    client.publish.return_value = info
+    record = record_module.MQTTTestRecord("oil/tests", ["frequency_hz"], client)
+
+    with pytest.raises(RuntimeError, match="rc=4"):
+        record.write({"frequency_hz": 1_000_000})
+
+    info.wait_for_publish.assert_not_called()
+
+
+def test_mqtt_record_reports_acknowledgement_timeout():
+    info = Mock(rc=0)
+    info.is_published.return_value = False
+    client = Mock()
+    client.publish.return_value = info
+    record = record_module.MQTTTestRecord("oil/tests", ["frequency_hz"], client, publish_timeout=2.0)
+
+    with pytest.raises(TimeoutError, match="timed out"):
+        record.write({"frequency_hz": 1_000_000})
+
+    info.wait_for_publish.assert_called_once_with(timeout=2.0)
+
+
+def test_mqtt_record_rejects_non_json_values_before_publish():
+    client = Mock()
+    record = record_module.MQTTTestRecord("oil/tests", ["frequency_hz"], client)
+
+    with pytest.raises(TypeError):
+        record.write({"frequency_hz": object()})
+
+    client.publish.assert_not_called()
 
 
 class _FakePath:

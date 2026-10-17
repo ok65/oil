@@ -14,6 +14,7 @@ python -m pip install pyoil
 For development and tests:
 
 ```bash
+python -m pip install -e .
 python -m pip install -r requirements-dev.txt
 python -m pytest
 ```
@@ -48,11 +49,12 @@ for instrument in instruments.values():
     instrument.close()
 ```
 
-Each entry has a supported driver `type`, connection fields, and optional
-`expected_model` substring and `settings`. The loader queries each instrument's
-identification string and requires it to contain the configured model name,
-case-insensitively. Settings are applied through the driver's writable
-properties immediately after connecting. See `oil/config.example.yaml` for all
+Each entry needs a supported driver `type`, connection fields, and a non-empty
+`expected_model` substring. The `settings` mapping is optional. The loader
+queries each instrument's identification string and requires it to contain the
+configured model name, case-insensitively. Settings are applied through the
+driver's writable properties immediately after connecting. See
+`oil/config.example.yaml` for all
 supported instrument types and the expected connection fields. If a
 configuration entry or identity check fails, instances created in that load
 are closed and the loader raises an exception.
@@ -81,6 +83,8 @@ if is_dhcp_server_running("instruments.local.yaml"):
 `python -m oil.dhcp_server instruments.local.yaml --status` provides the same
 check from a command prompt.
 
+## Common instrument lifecycle
+
 SCPI drivers connect when instantiated and provide these common methods:
 
 ```python
@@ -90,8 +94,8 @@ instrument.identify()  # queries *IDN?
 instrument.close()     # closes the VISA resource
 ```
 
-The drivers can also be used with a `with` statement. Explicit `close()` is
-recommended when managing the lifetime manually.
+Close SCPI drivers explicitly when finished; they do not implement the `with`
+statement. The PT-104 driver has its own context manager support below.
 
 ## SMR20 signal generator
 
@@ -149,6 +153,12 @@ Properties:
 | `frequency_stop` | `float` | Stop frequency in Hz |
 | `frequency_span` | `float` | Span in Hz |
 | `frequency_points` | `int` | Number of sweep points |
+| `sweep_type` | `str` | `LIN` or `LOG` frequency sweep |
+| `if_bandwidth` | `float` | IF bandwidth in Hz; must be positive |
+| `averaging_enabled` | `bool` | Averaging state |
+| `averaging_count` | `int` | Number of averages, from 1 to 999 |
+| `smoothing_enabled` | `bool` | Smoothing state |
+| `smoothing_aperture` | `float` | Smoothing aperture, from 0.05 to 25 percent |
 | `source_power` | `float` | Source power in dBm |
 | `reference_level` | `float` | Display reference level |
 | `scale_per_division` | `float` | Display scale per division |
@@ -182,6 +192,9 @@ vna.close()
 `download_trace(trace_id=1)` selects the requested trace and returns the
 current X-axis data and formatted Y-axis data. The returned dictionary has
 `frequency` and `level` lists.
+
+Call `vna.restart_averaging()` to clear the current average and begin a new
+averaging sequence.
 
 Marker operations:
 
@@ -248,6 +261,12 @@ Marker operations:
 | `analyser.marker[n].peak_search()` | Search for the maximum peak |
 | `analyser.marker[n].next_peak_right()` | Search for the next peak to the right |
 | `analyser.marker[n].next_peak_left()` | Search for the next peak to the left |
+
+`analyser.get_peaks_table(threshold=-200.0, excursion=0.0,
+order="amplitude", max_results=None)` returns the active trace's peaks as
+`{"amplitude": ..., "frequency": ...}` dictionaries. The frequency is in Hz.
+`order` accepts `"amplitude"`, `"frequency"`, or `"time"`; `analyser.peaks()`
+is an alias.
 
 ## RF switch matrix
 
@@ -326,6 +345,7 @@ from oil.data_loggers import PT100
 
 pt104.channel[1].probe_type = PT100
 pt104.channel[1].wires = 4
+pt104.wait_for_samples()  # wait for the first conversion
 temperature_c = pt104.channel[1].read()
 print(f"{temperature_c:.3f} °C")
 ```
@@ -343,10 +363,15 @@ Direct parent methods are also available:
 
 ```python
 pt104.configure_channel(1, PT100, wires=4)
+pt104.wait_for_samples(timeout=10.0)
 temperature_c = pt104.read_temperature(1)
 temperature_c = pt104.read(1, filtered=False)
 pt104.set_mains_frequency(50)  # or 60
 ```
+
+`wait_for_samples(timeout=10.0, poll_interval=0.05)` waits for every enabled
+channel to produce a sample. Reading immediately after configuration can raise
+`PT104NoSamplesAvailableError`; waiting can raise `TimeoutError`.
 
 Supported data types:
 
@@ -368,6 +393,9 @@ Supported data types:
 The test manager creates the Cartesian product of sweeps and actions.
 
 ```python
+from oil.analyzers import N9030
+from oil.core import ip_address_string
+from oil.sig_gens import SMR20
 from oil.test_manager import (
     ListSweep,
     ParameterSweep,
@@ -376,11 +404,16 @@ from oil.test_manager import (
     TestRecord,
 )
 
+generator = SMR20(ip_address_string("192.168.1.20"))
+analyser = N9030(ip_address_string("192.168.1.22"))
+
 def set_frequency(iteration, value):
     generator.frequency = value
     iteration.data["frequency_hz"] = value
 
 def record_measurement(iteration, _unused):
+    analyser.marker[1].enabled = True
+    analyser.marker[1].peak_search()
     iteration.data["measured_dbm"] = analyser.marker[1].power
     record.write(iteration.data)
 
@@ -394,7 +427,14 @@ test = TestManager([
     ListSweep("measurement", record_measurement, [None]),
 ])
 
-test.run()
+generator.power = -10
+generator.rf_enable = True
+try:
+    test.run()
+finally:
+    generator.rf_enable = False
+    generator.close()
+    analyser.close()
 ```
 
 Classes and methods:
@@ -407,11 +447,56 @@ Classes and methods:
 | `TestIteration(actions, test_manager)` | One combination of actions |
 | `TestManager(actions)` | Build and run all combinations |
 | `TestRecord(filepath, columns)` | Append timestamped CSV rows |
+| `MQTTTestRecord(topic, columns, client, publish_timeout=10.0)` | Publish timestamped JSON records over MQTT |
 | `TestParameter(...)` | Legacy/helper numeric parameter representation |
 
 `TestManager` also exposes `info()`, `warn()`, and `error()` logging helpers.
 `TestRecord.write()` ignores undeclared data keys and writes blank values for
-declared columns that are missing.
+declared columns that are missing. When appending to an existing CSV file, its
+header determines the columns, so the constructor's `columns` argument is
+ignored.
+
+### MQTT test records
+
+Install the optional MQTT dependency with `python -m pip install 'pyoil[mqtt]'`.
+`MQTTTestRecord` accepts a `paho.mqtt.client.Client` that the caller configures,
+connects, and runs. For a broker requiring mutual TLS:
+
+```python
+import paho.mqtt.client as mqtt
+from oil.test_manager import MQTTTestRecord
+
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+client.tls_set(
+    ca_certs="/path/to/broker-ca.pem",
+    certfile="/path/to/client-cert.pem",
+    keyfile="/path/to/client-key.pem",
+)
+client.connect("mqtt.example.com", 8883)
+client.loop_start()
+try:
+    record = MQTTTestRecord(
+        "oil/tests", ["frequency_hz", "measured_dbm"], client
+    )
+    record.write({"frequency_hz": 1_000_000, "measured_dbm": -20.14})
+finally:
+    client.disconnect()
+    client.loop_stop()
+```
+
+The CA file verifies the broker; the client certificate and private key
+authenticate the publisher. Keep the key outside the repository. The record
+writer does not load or store certificate files itself.
+
+Each `write(row_data)` publishes one JSON object at QoS 1 with declared keys
+and a local `timestamp` in the CSV record format. Undeclared keys are ignored,
+missing values are `""`, and JSON numbers retain their numeric type. Values
+must be JSON serializable; NaN and Infinity are rejected. The topic must be
+non-empty and contain no `+` or `#` wildcards; `publish_timeout` must be
+positive. Messages are not retained. The method waits up to
+`publish_timeout` seconds for the broker acknowledgement and raises on failure
+or timeout. MQTT records have no local persistence; write a CSV record
+separately if a local copy is required.
 
 ## Plotting traces
 
