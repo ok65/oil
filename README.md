@@ -158,7 +158,10 @@ client.connect("mqtt.example.com", 8883)
 client.loop_start()
 try:
     record = MQTTTestRecord(
-        "oil/tests", ["frequency_hz", "measured_power_dbm"], client
+        "oil/tests", ["frequency_hz", "measured_power_dbm"], client,
+        test_name="receiver sensitivity",
+        run_name="unit 4 at -20 dBm",
+        operator_name="Alex Smith",
     )
     record.write({"frequency_hz": 1_000_000, "measured_power_dbm": -20.14})
 finally:
@@ -172,6 +175,9 @@ remain numbers. The publish uses QoS 1 and waits up to 10 seconds for the broker
 acknowledgement; a failure or timeout raises an exception. The caller owns the
 client connection and network loop. MQTT publishing does not keep a local copy;
 write a CSV record as well if one is needed.
+Each `MQTTTestRecord` generates one compact `run_id` at construction and sends
+it with `test_name`, `run_name`, and `operator_name` in every message. Create a
+new record for each test run so messages from one run share an ID.
 The TLS certificate paths belong to the Paho client setup, so they are not
 passed to `MQTTTestRecord`. Keep the private key out of the repository.
 

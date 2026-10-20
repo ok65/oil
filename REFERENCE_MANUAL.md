@@ -447,7 +447,7 @@ Classes and methods:
 | `TestIteration(actions, test_manager)` | One combination of actions |
 | `TestManager(actions)` | Build and run all combinations |
 | `TestRecord(filepath, columns)` | Append timestamped CSV rows |
-| `MQTTTestRecord(topic, columns, client, publish_timeout=10.0)` | Publish timestamped JSON records over MQTT |
+| `MQTTTestRecord(topic, columns, client, test_name, run_name, operator_name, publish_timeout=10.0)` | Publish experiment metadata and JSON records over MQTT |
 | `TestParameter(...)` | Legacy/helper numeric parameter representation |
 
 `TestManager` also exposes `info()`, `warn()`, and `error()` logging helpers.
@@ -476,7 +476,10 @@ client.connect("mqtt.example.com", 8883)
 client.loop_start()
 try:
     record = MQTTTestRecord(
-        "oil/tests", ["frequency_hz", "measured_dbm"], client
+        "oil/tests", ["frequency_hz", "measured_dbm"], client,
+        test_name="receiver sensitivity",
+        run_name="unit 4 at -20 dBm",
+        operator_name="Alex Smith",
     )
     record.write({"frequency_hz": 1_000_000, "measured_dbm": -20.14})
 finally:
@@ -489,11 +492,14 @@ authenticate the publisher. Keep the key outside the repository. The record
 writer does not load or store certificate files itself.
 
 Each `write(row_data)` publishes one JSON object at QoS 1 with declared keys
-and a local `timestamp` in the CSV record format. Undeclared keys are ignored,
-missing values are `""`, and JSON numbers retain their numeric type. Values
-must be JSON serializable; NaN and Infinity are rejected. The topic must be
-non-empty and contain no `+` or `#` wildcards; `publish_timeout` must be
-positive. Messages are not retained. The method waits up to
+and a local `timestamp` in the CSV record format. Each record object generates
+one compact `run_id` at construction; every message also includes the supplied
+`test_name`, `run_name`, and `operator_name`. Create a new record object for
+each test run. Undeclared data keys are ignored, missing values are `""`, and
+JSON numbers retain their numeric type. Values must be JSON serializable; NaN
+and Infinity are rejected. The topic must be non-empty and contain no `+` or
+`#` wildcards; `publish_timeout` must be positive. Messages are not retained.
+The method waits up to
 `publish_timeout` seconds for the broker acknowledgement and raises on failure
 or timeout. MQTT records have no local persistence; write a CSV record
 separately if a local copy is required.

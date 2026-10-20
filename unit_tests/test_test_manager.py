@@ -142,7 +142,12 @@ def test_mqtt_record_publishes_json_and_waits_for_acknowledgement(monkeypatch):
     info.is_published.return_value = True
     client = Mock()
     client.publish.return_value = info
-    record = record_module.MQTTTestRecord("oil/tests", ["frequency_hz", "power_dbm"], client)
+    record = record_module.MQTTTestRecord(
+        "oil/tests", ["frequency_hz", "power_dbm"], client,
+        test_name="spectrum scan", run_name="morning run", operator_name="Alex",
+    )
+    assert len(record.run_id) == 8
+    int(record.run_id, 16)
 
     record.write({"frequency_hz": 1_000_000, "ignored": "value"})
 
@@ -151,6 +156,10 @@ def test_mqtt_record_publishes_json_and_waits_for_acknowledgement(monkeypatch):
     assert json.loads(args[1]) == {
         "frequency_hz": 1_000_000,
         "power_dbm": "",
+        "run_id": record.run_id,
+        "test_name": "spectrum scan",
+        "run_name": "morning run",
+        "operator_name": "Alex",
         "timestamp": "2026-09-07-12:00:00",
     }
     assert kwargs == {"qos": 1, "retain": False}
@@ -161,7 +170,10 @@ def test_mqtt_record_reports_publish_failure_without_waiting():
     info = Mock(rc=4)
     client = Mock()
     client.publish.return_value = info
-    record = record_module.MQTTTestRecord("oil/tests", ["frequency_hz"], client)
+    record = record_module.MQTTTestRecord(
+        "oil/tests", ["frequency_hz"], client,
+        test_name="spectrum scan", run_name="morning run", operator_name="Alex",
+    )
 
     with pytest.raises(RuntimeError, match="rc=4"):
         record.write({"frequency_hz": 1_000_000})
@@ -174,7 +186,11 @@ def test_mqtt_record_reports_acknowledgement_timeout():
     info.is_published.return_value = False
     client = Mock()
     client.publish.return_value = info
-    record = record_module.MQTTTestRecord("oil/tests", ["frequency_hz"], client, publish_timeout=2.0)
+    record = record_module.MQTTTestRecord(
+        "oil/tests", ["frequency_hz"], client,
+        test_name="spectrum scan", run_name="morning run", operator_name="Alex",
+        publish_timeout=2.0,
+    )
 
     with pytest.raises(TimeoutError, match="timed out"):
         record.write({"frequency_hz": 1_000_000})
@@ -184,7 +200,10 @@ def test_mqtt_record_reports_acknowledgement_timeout():
 
 def test_mqtt_record_rejects_non_json_values_before_publish():
     client = Mock()
-    record = record_module.MQTTTestRecord("oil/tests", ["frequency_hz"], client)
+    record = record_module.MQTTTestRecord(
+        "oil/tests", ["frequency_hz"], client,
+        test_name="spectrum scan", run_name="morning run", operator_name="Alex",
+    )
 
     with pytest.raises(TypeError):
         record.write({"frequency_hz": object()})

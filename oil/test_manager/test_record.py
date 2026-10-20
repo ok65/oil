@@ -5,6 +5,7 @@ from pathlib import Path
 import csv
 import json
 from datetime import datetime
+from uuid import NAMESPACE_DNS, uuid3, uuid4
 
 if TYPE_CHECKING:
     from paho.mqtt.client import Client
@@ -71,20 +72,36 @@ class MQTTTestRecord:
     The caller owns the client's connection, network loop, and cleanup.
     """
 
-    def __init__(self, topic: str, columns: List[str], client: "Client", publish_timeout: float = 10.0):
+    def __init__(self, topic: str, columns: List[str], client: "Client",
+                 test_name: str, run_name: str, operator_name: str,
+                 publish_timeout: float = 10.0):
         if not topic or "+" in topic or "#" in topic:
             raise ValueError("topic must be a non-empty MQTT publish topic without wildcards")
         if publish_timeout <= 0:
             raise ValueError("publish_timeout must be positive")
+        for field_name, value in (("test_name", test_name), ("run_name", run_name),
+                                  ("operator_name", operator_name)):
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
 
         self.topic = topic
         self.columns = list(columns)
         self.client = client
+        # UUID3 is name-based; a fresh UUID4 supplies a unique name per record
+        # instance. Keep the requested compact final eight hexadecimal digits.
+        self.run_id = uuid3(NAMESPACE_DNS, uuid4().hex).hex[-8:]
+        self.test_name = test_name
+        self.run_name = run_name
+        self.operator_name = operator_name
         self.publish_timeout = publish_timeout
 
     def write(self, row_data: Dict) -> None:
         """Publish one JSON object, waiting for its QoS 1 acknowledgement."""
         record = {column: row_data.get(column, "") for column in self.columns}
+        record["run_id"] = self.run_id
+        record["test_name"] = self.test_name
+        record["run_name"] = self.run_name
+        record["operator_name"] = self.operator_name
         record["timestamp"] = TestRecord._timestamp()
         payload = json.dumps(record, allow_nan=False)
 
