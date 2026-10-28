@@ -1,4 +1,4 @@
-
+import time
 # Library imports
 from typing import List, Dict, TYPE_CHECKING
 from pathlib import Path
@@ -6,6 +6,7 @@ import csv
 import json
 from datetime import datetime
 from uuid import NAMESPACE_DNS, uuid3, uuid4
+import time
 
 if TYPE_CHECKING:
     from paho.mqtt.client import Client
@@ -94,6 +95,7 @@ class MQTTTestRecord:
         self.run_name = run_name
         self.operator_name = operator_name
         self.publish_timeout = publish_timeout
+        self.test_start_timestamp = TestRecord._timestamp()
 
     def write(self, row_data: Dict) -> None:
         """Publish one JSON object, waiting for its QoS 1 acknowledgement."""
@@ -103,6 +105,7 @@ class MQTTTestRecord:
         record["run_name"] = self.run_name
         record["operator_name"] = self.operator_name
         record["timestamp"] = TestRecord._timestamp()
+        record["test_start_timestamp"] = self.test_start_timestamp
         payload = json.dumps(record, allow_nan=False)
 
         info = self.client.publish(self.topic, payload, qos=1, retain=False)

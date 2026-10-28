@@ -1,5 +1,6 @@
 # Copy this file to instruments.local.yaml and edit connection details for
 # your equipment. Keep machine-specific connection files out of Git.
+# Change the extension to .yaml
 instruments:
   signal_generator:
     type: SMR20
