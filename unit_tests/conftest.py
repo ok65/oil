@@ -3,7 +3,9 @@
 import pytest
 
 import oil.core.instrument as instrument_module
-from oil.analyzers import E5071C, VirtualE5071C, N9030, VirtualN9030
+from oil.analyzers import (
+    E5071C, VirtualE5071C, N9030, VirtualN9030, TinyVNA, VirtualTinyVNA,
+)
 from oil.sig_gens import SMR20, VirtualSMR20
 from oil.switches import RFSwitchMatrix, VirtualRFSwitchMatrix
 
@@ -74,3 +76,52 @@ def n9030_driver(monkeypatch):
         monkeypatch, N9030, virtual_instrument, "TCPIP::127.0.0.1::INSTR",
     )
     return driver, virtual_instrument, resource_manager
+
+
+class VirtualSerialPort:
+    """Serial-port adapter that exposes a VirtualInstrument shell as bytes."""
+
+    def __init__(self, virtual_instrument, **_kwargs):
+        self.virtual_instrument = virtual_instrument
+        self.is_open = True
+        self._response = bytearray()
+
+    def reset_input_buffer(self):
+        self._response.clear()
+
+    def write(self, data):
+        command = data.decode("ascii").rstrip("\r")
+        if command in ("info", "sweep", "power", "bandwidth") or command.startswith("scan "):
+            result = self.virtual_instrument.query(command)
+        else:
+            self.virtual_instrument.write(command)
+            result = ""
+        response = f"{command}\r\n"
+        if result:
+            response += f"{result}\r\n"
+        self._response.extend((response + "ch> ").encode("ascii"))
+        return len(data)
+
+    def flush(self):
+        pass
+
+    def read(self, size=1):
+        result = bytes(self._response[:size])
+        del self._response[:size]
+        return result
+
+    def close(self):
+        self.is_open = False
+
+
+@pytest.fixture
+def tinyvna_driver(monkeypatch):
+    virtual_instrument = VirtualTinyVNA()
+    serial_port = VirtualSerialPort(virtual_instrument)
+    monkeypatch.setattr(
+        instrument_module.serial,
+        "Serial",
+        lambda **kwargs: serial_port,
+    )
+    driver = TinyVNA("COM7")
+    return driver, virtual_instrument, serial_port

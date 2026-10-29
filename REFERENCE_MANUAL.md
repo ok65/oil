@@ -268,6 +268,32 @@ order="amplitude", max_results=None)` returns the active trace's peaks as
 `order` accepts `"amplitude"`, `"frequency"`, or `"time"`; `analyser.peaks()`
 is an alias.
 
+## NanoVNA-H vector network analyser
+
+`TinyVNA` targets the NanoVNA-H over its USB virtual COM port. The H uses a
+carriage-return-terminated text command shell, not VISA or SCPI.
+
+```python
+from oil.analyzers import TinyVNA
+
+vna = TinyVNA("COM7")
+vna.frequency_start = 1e6
+vna.frequency_stop = 100e6
+vna.frequency_points = 101
+vna.output_power = 1
+vna.bandwidth = 0
+s11 = vna.download_trace()
+s21 = vna.download_trace(trace_id=2)
+vna.close()
+```
+
+Sweep range and point properties are local settings used by the next
+`download_trace()` call. Trace 1 returns S11 and trace 2 returns S21, each as
+complex values alongside the frequency list. `output_power` is the firmware's
+discrete drive code (0–3, or 255 for automatic), not dBm. `bandwidth` is the
+firmware selection index; `bandwidth_hz` reads the corresponding value reported
+by the device.
+
 ## RF switch matrix
 
 Import and connect:
