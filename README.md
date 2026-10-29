@@ -19,6 +19,7 @@ python -m pip install pyoil
 - Rohde & Schwarz SMR20 signal generator
 - Keysight E5071C vector network analyser
 - Keysight N9030 signal analyser
+- NanoVNA-H vector network analyser (`TinyVNA`, serial text-shell protocol)
 - Dual-SP8T RF switch matrix
 - Pico Technology PT-104 temperature/resistance data logger
 
@@ -65,6 +66,26 @@ signal_generator.power = -10
 signal_generator.rf_enable = True
 
 print(signal_generator.frequency)  # 1000000.0
+```
+
+The NanoVNA-H uses its USB virtual COM port and a text command shell, not
+VISA/SCPI. `TinyVNA` is the first serial VNA driver and currently targets the
+NanoVNA-H command set:
+
+```python
+from oil.analyzers import TinyVNA
+
+vna = TinyVNA("COM7")
+try:
+    vna.frequency_start = 1e6
+    vna.frequency_stop = 100e6
+    vna.frequency_points = 101
+    vna.output_power = 1  # discrete drive code, not dBm
+    vna.bandwidth = 0     # firmware bandwidth index
+    trace = vna.download_trace()  # trace 1 is S11; trace_id=2 selects S21
+    print(trace["frequency"], trace["S11"])
+finally:
+    vna.close()
 ```
 
 ## Product-based test runs

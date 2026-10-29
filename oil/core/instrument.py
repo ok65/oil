@@ -2,6 +2,7 @@
 # Library imports
 import pyvisa
 import serial
+import threading
 import time
 from typing import Any, Callable, List, Mapping, Optional
 
@@ -47,6 +48,77 @@ class InstrumentBase:
 
     def close(self) -> None:
         """Release the instrument connection, if the driver has one."""
+
+
+class InstrumentSerial(InstrumentBase):
+    """Base for instruments controlled through a serial command interface."""
+
+    def __init__(self, port: str, baudrate: int = 115200,
+                 timeout: float = 5.0,
+                 log_func: Optional[Callable[[str], None]] = None,
+                 config: Optional[Mapping[str, Any]] = None):
+        super().__init__(log_func)
+        if not isinstance(port, str) or not port.strip():
+            raise ValueError("port must be a non-empty serial port name")
+        if timeout <= 0:
+            raise ValueError("timeout must be positive")
+        self._port = port
+        self._timeout = timeout
+        self._serial_lock = threading.RLock()
+        self._serial = serial.Serial(
+            port=port,
+            baudrate=baudrate,
+            timeout=min(timeout, 0.2),
+            write_timeout=timeout,
+        )
+        self._serial.reset_input_buffer()
+        if config is not None:
+            self.apply_config(config)
+
+    def close(self) -> None:
+        with self._serial_lock:
+            if getattr(self, "_serial", None) is not None and self._serial.is_open:
+                self._serial.close()
+
+    def _serial_command(self, command: str, prompt: bytes = b"ch> ") -> str:
+        """Send one CR-terminated shell command and read through its prompt.
+
+        NanoVNA-H echoes each command and terminates the response with a
+        ``ch> `` prompt. Concrete drivers can parse the returned response.
+        """
+        if not isinstance(command, str) or not command.strip():
+            raise ValueError("command must be a non-empty string")
+        if "\r" in command or "\n" in command:
+            raise ValueError("command must be a single line")
+
+        with self._serial_lock:
+            self._serial.reset_input_buffer()
+            self.log_func(command)
+            self._serial.write(command.encode("ascii") + b"\r")
+            self._serial.flush()
+
+            deadline = time.monotonic() + self._timeout
+            response = bytearray()
+            while time.monotonic() < deadline:
+                chunk = self._serial.read(256)
+                if chunk:
+                    response.extend(chunk)
+                    if response.endswith(prompt):
+                        break
+            if not response.endswith(prompt):
+                raise CommsTimeoutError(
+                    f"Timed out waiting for serial response to {command!r}"
+                )
+        try:
+            text = response[:-len(prompt)].decode("ascii").strip()
+        except UnicodeDecodeError as error:
+            raise ValueError("Serial response was not ASCII text") from error
+
+        # The shell echoes the command as the first response line.
+        lines = text.splitlines()
+        if lines and lines[0].strip() == command.strip():
+            lines = lines[1:]
+        return "\n".join(lines).strip()
 
 
 class InstrumentSCPI(InstrumentBase):

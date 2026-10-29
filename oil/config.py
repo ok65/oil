@@ -5,7 +5,7 @@ from typing import Dict, Mapping, Type
 
 import yaml
 
-from oil.analyzers import E5071C, N9030
+from oil.analyzers import E5071C, N9030, TinyVNA
 from oil.core.instrument import InstrumentBase
 from oil.core.errors import InstrumentIdentityError
 from oil.data_loggers import PT104
@@ -16,6 +16,7 @@ from oil.switches import RFSwitchMatrix
 _INSTRUMENT_TYPES: Dict[str, Type[InstrumentBase]] = {
     "E5071C": E5071C,
     "N9030": N9030,
+    "TinyVNA": TinyVNA,
     "PT104": PT104,
     "RFSwitchMatrix": RFSwitchMatrix,
     "SMR20": SMR20,
@@ -69,6 +70,10 @@ def load_instruments(filepath: str) -> Dict[str, InstrumentBase]:
                 if instrument_type == "PT104":
                     if "visa" in definition:
                         raise ValueError("PT104 configuration uses 'serial_number', not 'visa'")
+                    instrument = driver(**options)
+                elif instrument_type == "TinyVNA":
+                    if "visa" in definition:
+                        raise ValueError("TinyVNA configuration uses 'port', not 'visa'")
                     instrument = driver(**options)
                 else:
                     visa = definition.get("visa")

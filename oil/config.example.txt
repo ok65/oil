@@ -23,6 +23,20 @@ instruments:
     expected_model: "E5071C"
     visa: "TCPIP0::192.168.1.22::INSTR"
 
+  # NanoVNA-H uses its USB virtual COM port and text command shell.
+  # nano_vna:
+  #   type: TinyVNA
+  #   expected_model: "NanoVNA-H"
+  #   port: "COM7"
+  #   baudrate: 115200
+  #   timeout: 15
+  #   settings:
+  #     frequency_start: 1000000
+  #     frequency_stop: 100000000
+  #     frequency_points: 101
+  #     output_power: 1
+  #     bandwidth: 0
+
   switch:
     type: RFSwitchMatrix
     expected_model: "RF Switch Matrix"
