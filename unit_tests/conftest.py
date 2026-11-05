@@ -4,10 +4,11 @@ import pytest
 
 import oil.core.instrument as instrument_module
 from oil.analyzers import (
-    E5071C, VirtualE5071C, N9030, VirtualN9030, TinyVNA, VirtualTinyVNA,
+    E5071C, VirtualE5071C, ZNB, VirtualZNB, N9030, VirtualN9030, TinyVNA, VirtualTinyVNA,
 )
 from oil.sig_gens import SMR20, VirtualSMR20
 from oil.switches import RFSwitchMatrix, VirtualRFSwitchMatrix
+from oil.positioners import MaturoTurntable, VirtualMaturoTurntable
 
 
 class VirtualResourceManager:
@@ -41,6 +42,16 @@ def rf_switch_driver(monkeypatch, virtual_rf_switch):
     return driver, virtual_rf_switch, resource_manager
 
 
+@pytest.fixture
+def maturo_turntable_driver(monkeypatch):
+    virtual_instrument = VirtualMaturoTurntable()
+    driver, resource_manager = _connect_driver(
+        monkeypatch, MaturoTurntable, virtual_instrument,
+        "TCPIP0::127.0.0.1::1234::SOCKET",
+    )
+    return driver, virtual_instrument, resource_manager
+
+
 def _connect_driver(monkeypatch, driver_type, virtual_instrument, visa_string):
     resource_manager = VirtualResourceManager(virtual_instrument)
     monkeypatch.setattr(
@@ -65,6 +76,15 @@ def e5071c_driver(monkeypatch):
     virtual_instrument = VirtualE5071C()
     driver, resource_manager = _connect_driver(
         monkeypatch, E5071C, virtual_instrument, "TCPIP::127.0.0.1::INSTR",
+    )
+    return driver, virtual_instrument, resource_manager
+
+
+@pytest.fixture
+def znb_driver(monkeypatch):
+    virtual_instrument = VirtualZNB()
+    driver, resource_manager = _connect_driver(
+        monkeypatch, ZNB, virtual_instrument, "TCPIP::127.0.0.1::INSTR",
     )
     return driver, virtual_instrument, resource_manager
 

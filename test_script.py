@@ -1,23 +1,10 @@
 
-from oil.data_loggers import PT104
-import time
-
-if __name__ == "__main__":
-
-    pico = PT104()
-
-    pico.
-
-    while True:
+from oil.analyzers import ZNB
+from oil.core import ip_address_string
 
 
+def main():
 
-        print("downloading trace")
-        vna.download_trace() # Throw away data for now
+    vna = ZNB(ip_address_string("192.168.100.50"))
 
-        print("Sleeping")
-        time.sleep(10)
-
-
-
-    pass
+    vna.
